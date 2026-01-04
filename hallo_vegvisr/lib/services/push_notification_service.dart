@@ -10,24 +10,23 @@ class PushUserInfo {
   final String phone;
   final String? email;
 
-  const PushUserInfo({
-    required this.userId,
-    required this.phone,
-    this.email,
-  });
+  const PushUserInfo({required this.userId, required this.phone, this.email});
 }
 
 class PushNotificationService {
   static const String _tokenKey = 'fcm_token';
-  static const String _baseUrl = 'https://group-chat-worker.torarnehave.workers.dev';
+  static const String _baseUrl =
+      'https://group-chat-worker.torarnehave.workers.dev';
 
   FirebaseMessaging? _messaging;
-  final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
-  static const AndroidNotificationChannel _androidChannel = AndroidNotificationChannel(
-    'vegvisr_high_importance',
-    'Vegvisr Notifications',
-    importance: Importance.high,
-  );
+  final FlutterLocalNotificationsPlugin _fln =
+      FlutterLocalNotificationsPlugin();
+  static const AndroidNotificationChannel _androidChannel =
+      AndroidNotificationChannel(
+        'vegvisr_high_importance',
+        'Vegvisr Notifications',
+        importance: Importance.high,
+      );
 
   FirebaseMessaging? get _messagingOrNull {
     if (kIsWeb) {
@@ -77,7 +76,9 @@ class PushNotificationService {
     const initSettings = InitializationSettings(android: androidInit);
     await _fln.initialize(initSettings);
     await _fln
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(_androidChannel);
   }
 
@@ -213,7 +214,8 @@ class PushNotificationService {
 
   /// Setup background/terminated message handler (call in main before runApp)
   static void setupBackgroundHandler(
-      Future<void> Function(RemoteMessage) handler) {
+    Future<void> Function(RemoteMessage) handler,
+  ) {
     if (kIsWeb) {
       return;
     }
@@ -230,7 +232,9 @@ class PushNotificationService {
   }
 
   /// Setup handler for when app is opened from notification
-  void setupMessageOpenedAppHandler(Function(RemoteMessage) onMessageOpenedApp) {
+  void setupMessageOpenedAppHandler(
+    Function(RemoteMessage) onMessageOpenedApp,
+  ) {
     if (kIsWeb) {
       return;
     }

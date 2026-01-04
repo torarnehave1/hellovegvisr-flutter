@@ -23,9 +23,7 @@ import 'services/push_notification_service.dart';
 // Background message handler - must be top-level function
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // Handle background message (notification is shown automatically by FCM)
 }
 
@@ -59,8 +57,9 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late GoRouter _router;
-  final PushNotificationService? _pushService =
-      kIsWeb ? null : PushNotificationService();
+  final PushNotificationService? _pushService = kIsWeb
+      ? null
+      : PushNotificationService();
   final _authService = AuthService();
   final GlobalKey<ScaffoldMessengerState> _messengerKey =
       GlobalKey<ScaffoldMessengerState>();
@@ -80,15 +79,23 @@ class _MyAppState extends State<MyApp> {
     await _pushService!.initialize(userInfoProvider: _getUserInfoForPush);
 
     // Handle foreground messages (debug visibility)
-    _pushService!.setupForegroundHandler(onMessage: (message) {
-      debugPrint('FCM foreground message: ${message.data} | ${message.notification}');
-      final notification = message.notification;
-      final title = notification?.title ?? 'New message';
-      final body = notification?.body ?? message.data.toString();
-      _messengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text('$title: ${body.length > 80 ? body.substring(0, 80) + '…' : body}')),
-      );
-    });
+    _pushService!.setupForegroundHandler(
+      onMessage: (message) {
+        debugPrint(
+          'FCM foreground message: ${message.data} | ${message.notification}',
+        );
+        final notification = message.notification;
+        final title = notification?.title ?? 'New message';
+        final body = notification?.body ?? message.data.toString();
+        _messengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              '$title: ${body.length > 80 ? body.substring(0, 80) + '…' : body}',
+            ),
+          ),
+        );
+      },
+    );
 
     // Handle notification tap when app was in background
     _pushService!.setupMessageOpenedAppHandler((message) {
@@ -224,8 +231,9 @@ class _MyAppState extends State<MyApp> {
       scaffoldMessengerKey: _messengerKey,
       title: 'Hallo Vegvisr',
       theme: ThemeData(
-        colorScheme:
-            ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 20, 195, 17)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 20, 195, 17),
+        ),
         useMaterial3: true,
       ),
       routerConfig: _router,

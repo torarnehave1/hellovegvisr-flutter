@@ -50,7 +50,8 @@ class _DebugFcmTokenScreenState extends State<DebugFcmTokenScreen> {
         _token = resolvedToken;
         _loading = false;
         if (resolvedToken == null) {
-          _error = 'No FCM token yet. Try refresh after login or check push permissions.';
+          _error =
+              'No FCM token yet. Try refresh after login or check push permissions.';
         }
       });
     } catch (e) {
@@ -75,18 +76,13 @@ class _DebugFcmTokenScreenState extends State<DebugFcmTokenScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('FCM Token Debug'),
-      ),
+      appBar: AppBar(title: const Text('FCM Token Debug')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Current FCM token',
-              style: theme.textTheme.titleMedium,
-            ),
+            Text('Current FCM token', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
             if (_loading)
               const Row(

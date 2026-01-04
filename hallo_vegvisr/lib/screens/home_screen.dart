@@ -55,9 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _logout() async {
     await _authService.logout();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Logged out')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Logged out')));
       context.go('/login');
     }
   }
@@ -111,10 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
             const Text(
               'HALLO VEGVISR',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             if (_userPhone != null) ...[
               const SizedBox(height: 12),
@@ -125,10 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 4),
                   Text(
                     _userPhone!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -158,7 +152,12 @@ class _HomeScreenState extends State<HomeScreen> {
           // Header with user profile (Telegram-style)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.only(top: 50, left: 16, right: 16, bottom: 16),
+            padding: const EdgeInsets.only(
+              top: 50,
+              left: 16,
+              right: 16,
+              bottom: 16,
+            ),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -187,10 +186,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     // Night mode toggle (like Telegram)
                     IconButton(
-                      icon: const Icon(Icons.dark_mode_outlined, color: Colors.white),
+                      icon: const Icon(
+                        Icons.dark_mode_outlined,
+                        color: Colors.white,
+                      ),
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Dark mode coming soon')),
+                          const SnackBar(
+                            content: Text('Dark mode coming soon'),
+                          ),
                         );
                       },
                     ),
@@ -200,9 +204,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 // User name/email
                 if (_userEmail != null && _userEmail!.isNotEmpty)
                   Text(
-                    _userEmail!.split('@')[0].replaceAll('.', ' ').split(' ').map((word) =>
-                      word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : ''
-                    ).join(' '),
+                    _userEmail!
+                        .split('@')[0]
+                        .replaceAll('.', ' ')
+                        .split(' ')
+                        .map(
+                          (word) => word.isNotEmpty
+                              ? '${word[0].toUpperCase()}${word.substring(1)}'
+                              : '',
+                        )
+                        .join(' '),
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -294,7 +305,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Share feature coming soon')),
+                      const SnackBar(
+                        content: Text('Share feature coming soon'),
+                      ),
                     );
                   },
                 ),
@@ -349,10 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
       leading: Icon(icon, color: iconColor ?? const Color(0xFF4f6d7a)),
       title: Text(
         title,
-        style: TextStyle(
-          fontSize: 16,
-          color: textColor ?? Colors.black87,
-        ),
+        style: TextStyle(fontSize: 16, color: textColor ?? Colors.black87),
       ),
       onTap: onTap,
     );

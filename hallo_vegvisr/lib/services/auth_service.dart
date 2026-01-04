@@ -137,6 +137,123 @@ class AuthService {
     await prefs.remove('user_email');
     await prefs.remove('user_phone');
     await prefs.remove('verified_at');
+    await prefs.remove('profile_image_url');
     await prefs.setBool('logged_in', false);
+  }
+
+  /// Get user profile from server (includes profile_image_url)
+  Future<Map<String, dynamic>> getUserProfile() async {
+    try {
+      final phone = await getPhone();
+      final userId = await getUserId();
+
+      if (phone == null && userId == null) {
+        return {'success': false, 'error': 'Not logged in'};
+      }
+
+      final queryParam = userId != null
+          ? 'user_id=${Uri.encodeComponent(userId)}'
+          : 'phone=${Uri.encodeComponent(phone!)}';
+
+      final response = await http.get(
+        Uri.parse('$smsApiUrl/api/auth/profile?$queryParam'),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        // Cache the profile image URL locally
+        if (data['profile_image_url'] != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('profile_image_url', data['profile_image_url']);
+        }
+        return {
+          'success': true,
+          'user_id': data['user_id'],
+          'email': data['email'],
+          'phone': data['phone'],
+          'profile_image_url': data['profile_image_url'],
+          'verified': data['verified'],
+        };
+      } else {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Failed to get profile',
+        };
+      }
+    } catch (e) {
+      print('Get profile error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  /// Update user profile image URL
+  Future<Map<String, dynamic>> updateProfileImage(String imageUrl) async {
+    try {
+      final phone = await getPhone();
+      final userId = await getUserId();
+
+      if (phone == null && userId == null) {
+        return {'success': false, 'error': 'Not logged in'};
+      }
+
+      final response = await http.put(
+        Uri.parse('$smsApiUrl/api/auth/profile'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': phone,
+          'user_id': userId,
+          'profile_image_url': imageUrl,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        // Cache the profile image URL locally
+        final prefs = await SharedPreferences.getInstance();
+        if (imageUrl.isNotEmpty) {
+          await prefs.setString('profile_image_url', imageUrl);
+        } else {
+          await prefs.remove('profile_image_url');
+        }
+        return {
+          'success': true,
+          'profile_image_url': data['profile_image_url'],
+        };
+      } else {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Failed to update profile',
+        };
+      }
+    } catch (e) {
+      print('Update profile error: $e');
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  /// Get cached profile image URL (from local storage)
+  Future<String?> getProfileImageUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('profile_image_url');
+  }
+
+  /// Get another user's profile image by user_id (for chat display)
+  Future<String?> getUserProfileImage(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$smsApiUrl/api/auth/profile/image?user_id=${Uri.encodeComponent(userId)}'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['profile_image_url'];
+      }
+      return null;
+    } catch (e) {
+      print('Get user profile image error: $e');
+      return null;
+    }
   }
 }

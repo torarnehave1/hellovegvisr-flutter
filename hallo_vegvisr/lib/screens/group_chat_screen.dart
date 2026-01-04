@@ -6,6 +6,28 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/group_chat_service.dart';
 
+/// Cache for user profile images to avoid repeated API calls
+class _UserProfileCache {
+  static final Map<String, String?> _cache = {};
+  static final Map<String, DateTime> _cacheTime = {};
+  static const Duration _cacheDuration = Duration(minutes: 5);
+
+  static String? get(String userId) => _cache[userId];
+
+  static void set(String userId, String? imageUrl) {
+    _cache[userId] = imageUrl;
+    _cacheTime[userId] = DateTime.now();
+  }
+
+  static bool isExpired(String userId) {
+    final time = _cacheTime[userId];
+    if (time == null) return true;
+    return DateTime.now().difference(time) > _cacheDuration;
+  }
+
+  static bool has(String userId) => _cache.containsKey(userId) && !isExpired(userId);
+}
+
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
   final String? groupName;
@@ -31,9 +53,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String? _phone;
   String? _email;
   String? _groupImageUrl;
+  String? _myProfileImageUrl;
   bool _loading = true;
+  bool _sending = false;
   int _lastMessageId = 0;
   final List<Map<String, dynamic>> _messages = [];
+  final Map<String, String?> _userProfileImages = {};
 
   @override
   void initState() {
@@ -45,11 +70,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final userId = await _authService.getUserId();
     final phone = await _authService.getPhone();
     final email = await _authService.getEmail();
+    final profileImageUrl = await _authService.getProfileImageUrl();
     setState(() {
       _userId = userId;
       _phone = phone;
       _email = email;
+      _myProfileImageUrl = profileImageUrl;
     });
+
+    // Cache my own profile image
+    if (userId != null) {
+      _userProfileImages[userId] = profileImageUrl;
+      _UserProfileCache.set(userId, profileImageUrl);
+    }
 
     await _loadGroupInfo();
     await _loadMessages();
@@ -137,11 +170,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         after: _lastMessageId,
       );
       if (messages.isNotEmpty) {
-        setState(() {
-          _messages.addAll(messages);
-          _lastMessageId = _messages.last['id'] as int;
-        });
-        _scrollToBottom();
+        // Get existing message IDs to prevent duplicates
+        final existingIds = _messages.map((m) => m['id']).toSet();
+        final newMessages = messages.where((m) => !existingIds.contains(m['id'])).toList();
+
+        if (newMessages.isNotEmpty) {
+          setState(() {
+            _messages.addAll(newMessages);
+            _lastMessageId = _messages.last['id'] as int;
+          });
+          _scrollToBottom();
+        }
       }
     } catch (_) {
       // Ignore polling errors to avoid UI spam.
@@ -156,7 +195,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (_userId == null || _phone == null) {
       return;
     }
+    // Prevent double-tap sending
+    if (_sending) {
+      return;
+    }
 
+    setState(() => _sending = true);
     _messageController.clear();
     try {
       final message = await _chatService.sendMessage(
@@ -177,6 +221,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           SnackBar(content: Text('Failed to send message: $e')),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() => _sending = false);
+      }
     }
   }
 
@@ -189,6 +237,33 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
+  }
+
+  /// Load profile image for a user (with caching)
+  Future<void> _loadUserProfileImage(String userId) async {
+    // Check local cache first
+    if (_userProfileImages.containsKey(userId)) return;
+
+    // Check global cache
+    if (_UserProfileCache.has(userId)) {
+      setState(() {
+        _userProfileImages[userId] = _UserProfileCache.get(userId);
+      });
+      return;
+    }
+
+    // Fetch from server
+    try {
+      final imageUrl = await _authService.getUserProfileImage(userId);
+      _UserProfileCache.set(userId, imageUrl);
+      if (mounted) {
+        setState(() {
+          _userProfileImages[userId] = imageUrl;
+        });
+      }
+    } catch (_) {
+      // Ignore errors - just don't show image
+    }
   }
 
   @override
@@ -280,6 +355,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Widget _buildMessageBubble(Map<String, dynamic> message, bool isMine) {
     final text = message['body']?.toString() ?? '';
+    final messageUserId = message['user_id']?.toString();
     final baseStyle = TextStyle(
       color: isMine ? Colors.white : Colors.black87,
     );
@@ -287,21 +363,86 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       color: isMine ? Colors.lightBlueAccent : Colors.blueAccent,
       decoration: TextDecoration.underline,
     );
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        decoration: BoxDecoration(
-          color: isMine ? const Color(0xFF4f6d7a) : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(12),
+
+    // Load profile image for other users
+    if (!isMine && messageUserId != null && !_userProfileImages.containsKey(messageUserId)) {
+      _loadUserProfileImage(messageUserId);
+    }
+
+    // Get profile image URL for this message's sender
+    final profileImageUrl = messageUserId != null ? _userProfileImages[messageUserId] : null;
+
+    // Get initials from email or phone for fallback avatar
+    String getInitials() {
+      final email = message['email']?.toString();
+      final phone = message['phone']?.toString();
+      if (email != null && email.isNotEmpty) {
+        final parts = email.split('@')[0].split('.');
+        if (parts.length >= 2) {
+          return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+        }
+        return email[0].toUpperCase();
+      }
+      if (phone != null && phone.length >= 2) {
+        return phone.substring(phone.length - 2);
+      }
+      return '?';
+    }
+
+    final messageBubble = Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.7,
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: isMine ? const Color(0xFF4f6d7a) : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: baseStyle,
+          children: _buildMessageSpans(text, linkStyle),
         ),
-        child: RichText(
-          text: TextSpan(
-            style: baseStyle,
-            children: _buildMessageSpans(text, linkStyle),
+      ),
+    );
+
+    // For my messages, just show the bubble aligned right
+    if (isMine) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: messageBubble,
+        ),
+      );
+    }
+
+    // For other users' messages, show avatar + bubble
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // User avatar
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xFF4f6d7a).withValues(alpha: 0.3),
+            backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null,
+            child: profileImageUrl == null
+                ? Text(
+                    getInitials(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF4f6d7a),
+                    ),
+                  )
+                : null,
           ),
-        ),
+          const SizedBox(width: 8),
+          // Message bubble
+          Flexible(child: messageBubble),
+        ],
       ),
     );
   }

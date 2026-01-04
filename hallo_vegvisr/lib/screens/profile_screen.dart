@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 import '../services/knowledge_graph_service.dart';
 
@@ -13,12 +14,15 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   final _knowledgeGraphService = KnowledgeGraphService();
+  final _imagePicker = ImagePicker();
 
   String? _userPhone;
   String? _userEmail;
   String? _userId;
+  String? _profileImageUrl;
   int _graphCount = 0;
   bool _loading = true;
+  bool _uploadingImage = false;
 
   @override
   void initState() {
@@ -39,6 +43,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _userId = userId;
     });
 
+    // Load profile from server (includes profile_image_url)
+    final profileResult = await _authService.getUserProfile();
+    if (profileResult['success'] == true) {
+      setState(() {
+        _profileImageUrl = profileResult['profile_image_url'];
+      });
+    }
+
     // Load graph count
     if (phone != null) {
       final result = await _knowledgeGraphService.getMyGraphs(
@@ -53,6 +65,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     setState(() => _loading = false);
+  }
+
+  Future<void> _pickAndUploadProfileImage() async {
+    final pickedFile = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+
+    if (pickedFile == null) return;
+
+    setState(() => _uploadingImage = true);
+
+    try {
+      // Upload image using knowledge graph service (same R2 bucket)
+      final imageBytes = await pickedFile.readAsBytes();
+      final fileName = pickedFile.name;
+
+      // Determine MIME type from file extension
+      String mimeType = 'image/jpeg';
+      if (fileName.toLowerCase().endsWith('.png')) {
+        mimeType = 'image/png';
+      } else if (fileName.toLowerCase().endsWith('.gif')) {
+        mimeType = 'image/gif';
+      }
+
+      final uploadResult = await _knowledgeGraphService.uploadImage(
+        imageBytes,
+        fileName,
+        mimeType,
+      );
+
+      if (uploadResult['success'] == true && uploadResult['url'] != null) {
+        final imageUrl = uploadResult['url'] as String;
+        // Update profile with new image URL
+        final updateResult = await _authService.updateProfileImage(imageUrl);
+        if (updateResult['success'] == true) {
+          setState(() {
+            _profileImageUrl = imageUrl;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Profile image updated')),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to save: ${updateResult['error']}')),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to upload: ${uploadResult['error'] ?? 'Unknown error'}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingImage = false);
+      }
+    }
   }
 
   String _getInitials() {
@@ -104,17 +187,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Column(
                       children: [
-                        // Large avatar
-                        CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.white.withValues(alpha: 0.2),
-                          child: Text(
-                            _getInitials(),
-                            style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                        // Large avatar with camera overlay
+                        GestureDetector(
+                          onTap: _uploadingImage ? null : _pickAndUploadProfileImage,
+                          child: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 50,
+                                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                backgroundImage: _profileImageUrl != null
+                                    ? NetworkImage(_profileImageUrl!)
+                                    : null,
+                                child: _profileImageUrl == null
+                                    ? Text(
+                                        _getInitials(),
+                                        style: const TextStyle(
+                                          fontSize: 36,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4f6d7a),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                  ),
+                                  child: _uploadingImage
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.camera_alt,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 16),

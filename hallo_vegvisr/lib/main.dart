@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
+import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/create_graph_screen.dart';
@@ -16,6 +17,7 @@ import 'screens/group_chat_list_screen.dart';
 import 'screens/group_chat_screen.dart';
 import 'screens/group_info_screen.dart';
 import 'screens/join_group_screen.dart';
+import 'screens/debug_fcm_token_screen.dart';
 import 'services/push_notification_service.dart';
 
 // Background message handler - must be top-level function
@@ -59,6 +61,9 @@ class _MyAppState extends State<MyApp> {
   late GoRouter _router;
   final PushNotificationService? _pushService =
       kIsWeb ? null : PushNotificationService();
+  final _authService = AuthService();
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
@@ -72,21 +77,22 @@ class _MyAppState extends State<MyApp> {
       return; // Skip if Firebase is not configured
     }
 
-    await _pushService!.initialize();
+    await _pushService!.initialize(userInfoProvider: _getUserInfoForPush);
 
-    // Handle foreground messages
-    _pushService!.setupForegroundHandler((message) {
-      // Show a snackbar or in-app notification for foreground messages
+    // Handle foreground messages (debug visibility)
+    _pushService!.setupForegroundHandler(onMessage: (message) {
+      debugPrint('FCM foreground message: ${message.data} | ${message.notification}');
       final notification = message.notification;
-      if (notification != null) {
-        // Message received while app is in foreground
-        // The notification banner won't show automatically,
-        // but we can handle it in the chat screen via polling
-      }
+      final title = notification?.title ?? 'New message';
+      final body = notification?.body ?? message.data.toString();
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('$title: ${body.length > 80 ? body.substring(0, 80) + '…' : body}')),
+      );
     });
 
     // Handle notification tap when app was in background
     _pushService!.setupMessageOpenedAppHandler((message) {
+      debugPrint('FCM onMessageOpenedApp: ${message.data}');
       final data = message.data;
       final groupId = data['group_id'];
       final groupName = data['group_name'];
@@ -108,6 +114,21 @@ class _MyAppState extends State<MyApp> {
         });
       }
     }
+  }
+
+  Future<PushUserInfo?> _getUserInfoForPush() async {
+    final loggedIn = await _authService.isLoggedIn();
+    if (!loggedIn) return null;
+
+    final userId = await _authService.getUserId();
+    final phone = await _authService.getPhone();
+    final email = await _authService.getEmail();
+
+    if (userId == null || phone == null) {
+      return null;
+    }
+
+    return PushUserInfo(userId: userId, phone: phone, email: email);
   }
 
   void _initRouter() {
@@ -189,6 +210,10 @@ class _MyAppState extends State<MyApp> {
             return JoinGroupScreen(inviteCode: inviteCode);
           },
         ),
+        GoRoute(
+          path: '/debug/fcm-token',
+          builder: (context, state) => const DebugFcmTokenScreen(),
+        ),
       ],
     );
   }
@@ -196,6 +221,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
+      scaffoldMessengerKey: _messengerKey,
       title: 'Hallo Vegvisr',
       theme: ThemeData(
         colorScheme:

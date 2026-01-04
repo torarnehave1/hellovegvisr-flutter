@@ -1,14 +1,33 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+class PushUserInfo {
+  final String userId;
+  final String phone;
+  final String? email;
+
+  const PushUserInfo({
+    required this.userId,
+    required this.phone,
+    this.email,
+  });
+}
 
 class PushNotificationService {
   static const String _tokenKey = 'fcm_token';
   static const String _baseUrl = 'https://group-chat-worker.torarnehave.workers.dev';
 
   FirebaseMessaging? _messaging;
+  final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
+  static const AndroidNotificationChannel _androidChannel = AndroidNotificationChannel(
+    'vegvisr_high_importance',
+    'Vegvisr Notifications',
+    importance: Importance.high,
+  );
 
   FirebaseMessaging? get _messagingOrNull {
     if (kIsWeb) {
@@ -19,11 +38,14 @@ class PushNotificationService {
   }
 
   /// Initialize push notifications and request permissions
-  Future<void> initialize() async {
+  Future<void> initialize({
+    Future<PushUserInfo?> Function()? userInfoProvider,
+  }) async {
     final messaging = _messagingOrNull;
     if (messaging == null) {
       return;
     }
+    await _initLocalNotifications();
     // Request permission for iOS (Android grants automatically)
     final settings = await messaging.requestPermission(
       alert: true,
@@ -38,10 +60,43 @@ class PushNotificationService {
       final token = await messaging.getToken();
       if (token != null) {
         await _saveToken(token);
+        await _registerWithBackend(token, userInfoProvider);
       }
 
       // Listen for token refresh
-      messaging.onTokenRefresh.listen(_saveToken);
+      messaging.onTokenRefresh.listen((newToken) async {
+        await _saveToken(newToken);
+        await _registerWithBackend(newToken, userInfoProvider);
+      });
+    }
+  }
+
+  Future<void> _initLocalNotifications() async {
+    if (kIsWeb) return;
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+    await _fln.initialize(initSettings);
+    await _fln
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(_androidChannel);
+  }
+
+  Future<void> _registerWithBackend(
+    String token,
+    Future<PushUserInfo?> Function()? userInfoProvider,
+  ) async {
+    if (userInfoProvider == null) return;
+    final info = await userInfoProvider();
+    if (info == null) return;
+
+    final ok = await registerDeviceToken(
+      userId: info.userId,
+      phone: info.phone,
+      email: info.email,
+      tokenOverride: token,
+    );
+    if (!ok) {
+      debugPrint('Push registration failed for user ${info.userId}');
     }
   }
 
@@ -62,8 +117,9 @@ class PushNotificationService {
     required String userId,
     required String phone,
     String? email,
+    String? tokenOverride,
   }) async {
-    final token = await getToken();
+    final token = tokenOverride ?? await getToken();
     if (token == null) {
       return false;
     }
@@ -121,11 +177,38 @@ class PushNotificationService {
   }
 
   /// Setup foreground message handler
-  void setupForegroundHandler(Function(RemoteMessage) onMessage) {
+  void setupForegroundHandler({Function(RemoteMessage)? onMessage}) {
     if (kIsWeb) {
       return;
     }
-    FirebaseMessaging.onMessage.listen(onMessage);
+    FirebaseMessaging.onMessage.listen((message) {
+      onMessage?.call(message);
+      _showLocalNotification(message);
+    });
+  }
+
+  Future<void> _showLocalNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    final android = notification?.android;
+    final title = notification?.title ?? message.data['title'] ?? 'Vegvisr';
+    final body = notification?.body ?? message.data['body'] ?? '';
+
+    await _fln.show(
+      notification.hashCode,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _androidChannel.id,
+          _androidChannel.name,
+          channelDescription: _androidChannel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: android?.smallIcon ?? '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: jsonEncode(message.data),
+    );
   }
 
   /// Setup background/terminated message handler (call in main before runApp)

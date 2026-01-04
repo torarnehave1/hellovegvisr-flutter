@@ -308,6 +308,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
+                _buildDrawerItem(
+                  icon: Icons.bug_report_outlined,
+                  title: 'FCM Debug (token)',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/debug/fcm-token');
+                  },
+                ),
               ],
             ),
           ),

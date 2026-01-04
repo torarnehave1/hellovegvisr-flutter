@@ -1,7 +1,16 @@
+
 allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://maven.pkg.github.com/arthenica/ffmpeg-kit")
+            credentials {
+                username = (findProperty("gpr.user") ?: System.getenv("GITHUB_USER")) as String?
+                password = (findProperty("gpr.key") ?: System.getenv("GITHUB_TOKEN")) as String?
+            }
+        }
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
@@ -18,6 +27,7 @@ subprojects {
 subprojects {
     project.evaluationDependsOn(":app")
 }
+
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)

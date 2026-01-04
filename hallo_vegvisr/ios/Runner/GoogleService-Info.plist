@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyCc6iYPiPW5ILsbhwT4tW_bvBKQF8WyZMU</string>
+	<key>GCM_SENDER_ID</key>
+	<string>24455336442</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>org.vegvisr.hallo</string>
+	<key>PROJECT_ID</key>
+	<string>hello-vegvisr</string>
+	<key>STORAGE_BUCKET</key>
+	<string>hello-vegvisr.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:24455336442:ios:c791c94268b583188d9443</string>
+</dict>
+</plist>

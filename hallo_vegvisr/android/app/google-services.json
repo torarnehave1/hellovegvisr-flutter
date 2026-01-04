@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "24455336442",
+    "project_id": "hello-vegvisr",
+    "storage_bucket": "hello-vegvisr.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:24455336442:android:15af0d3a2d4204258d9443",
+        "android_client_info": {
+          "package_name": "com.example.hallo_vegvisr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxx_QdwKRQgDlKV4ulDBD6Y-Kkb_0Bhus"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

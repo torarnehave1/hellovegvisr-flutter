@@ -1,122 +1,208 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
+import 'screens/login_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/create_graph_screen.dart';
+import 'screens/my_graphs_screen.dart';
+import 'screens/edit_graph_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/group_chat_list_screen.dart';
+import 'screens/group_chat_screen.dart';
+import 'screens/group_info_screen.dart';
+import 'screens/join_group_screen.dart';
+import 'services/push_notification_service.dart';
 
-void main() {
+// Background message handler - must be top-level function
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  // Handle background message (notification is shown automatically by FCM)
+}
+
+bool firebaseInitialized = false;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (will fail gracefully if not configured)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    firebaseInitialized = true;
+    // Setup background message handler only if Firebase is initialized
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    // Firebase not configured - push notifications will be disabled
+    debugPrint('Firebase not configured: $e');
+  }
+
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: const Color.fromARGB(255, 20, 195, 17)),
-      ),
-      home: const MyHomePage(title: 'Hello Vegvisr'),
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late GoRouter _router;
+  final PushNotificationService? _pushService =
+      kIsWeb ? null : PushNotificationService();
+
+  @override
+  void initState() {
+    super.initState();
+    _initRouter();
+    _initPushNotifications();
+  }
+
+  Future<void> _initPushNotifications() async {
+    if (!firebaseInitialized || _pushService == null) {
+      return; // Skip if Firebase is not configured
+    }
+
+    await _pushService!.initialize();
+
+    // Handle foreground messages
+    _pushService!.setupForegroundHandler((message) {
+      // Show a snackbar or in-app notification for foreground messages
+      final notification = message.notification;
+      if (notification != null) {
+        // Message received while app is in foreground
+        // The notification banner won't show automatically,
+        // but we can handle it in the chat screen via polling
+      }
+    });
+
+    // Handle notification tap when app was in background
+    _pushService!.setupMessageOpenedAppHandler((message) {
+      final data = message.data;
+      final groupId = data['group_id'];
+      final groupName = data['group_name'];
+      if (groupId != null) {
+        _router.push('/group-chat/$groupId', extra: groupName);
+      }
+    });
+
+    // Check if app was opened from a notification
+    final initialMessage = await _pushService!.getInitialMessage();
+    if (initialMessage != null) {
+      final data = initialMessage.data;
+      final groupId = data['group_id'];
+      final groupName = data['group_name'];
+      if (groupId != null) {
+        // Delay navigation to allow router to initialize
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _router.push('/group-chat/$groupId', extra: groupName);
+        });
+      }
+    }
+  }
+
+  void _initRouter() {
+    _router = GoRouter(
+      redirect: (context, state) async {
+        final prefs = await SharedPreferences.getInstance();
+        final loggedIn = prefs.getBool('logged_in') ?? false;
+
+        // Redirect to login if not logged in
+        if (!loggedIn && state.matchedLocation != '/login') {
+          return '/login';
+        }
+
+        // Redirect to home if logged in and on login page
+        if (loggedIn && state.matchedLocation == '/login') {
+          return '/';
+        }
+
+        return null;
+      },
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => HomeScreen(
+            openDrawer: state.uri.queryParameters['openDrawer'] == 'true',
+          ),
+        ),
+        GoRoute(
+          path: '/login',
+          builder: (context, state) => const LoginScreen(),
+        ),
+        GoRoute(
+          path: '/create-graph',
+          builder: (context, state) => const CreateGraphScreen(),
+        ),
+        GoRoute(
+          path: '/my-graphs',
+          builder: (context, state) => const MyGraphsScreen(),
+        ),
+        GoRoute(
+          path: '/edit-graph/:graphId',
+          builder: (context, state) {
+            final graphId = state.pathParameters['graphId']!;
+            return EditGraphScreen(graphId: graphId);
+          },
+        ),
+        GoRoute(
+          path: '/profile',
+          builder: (context, state) => const ProfileScreen(),
+        ),
+        GoRoute(
+          path: '/settings',
+          builder: (context, state) => const SettingsScreen(),
+        ),
+        GoRoute(
+          path: '/group-chats',
+          builder: (context, state) => const GroupChatListScreen(),
+        ),
+        GoRoute(
+          path: '/group-chat/:groupId',
+          builder: (context, state) {
+            final groupId = state.pathParameters['groupId']!;
+            final groupName = state.extra as String?;
+            return GroupChatScreen(groupId: groupId, groupName: groupName);
+          },
+        ),
+        GoRoute(
+          path: '/group-info/:groupId',
+          builder: (context, state) {
+            final groupId = state.pathParameters['groupId']!;
+            final groupName = state.extra as String?;
+            return GroupInfoScreen(groupId: groupId, groupName: groupName);
+          },
+        ),
+        GoRoute(
+          path: '/join/:inviteCode',
+          builder: (context, state) {
+            final inviteCode = state.pathParameters['inviteCode']!;
+            return JoinGroupScreen(inviteCode: inviteCode);
+          },
+        ),
+      ],
     );
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+    return MaterialApp.router(
+      title: 'Hallo Vegvisr',
+      theme: ThemeData(
+        colorScheme:
+            ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 20, 195, 17)),
+        useMaterial3: true,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+      routerConfig: _router,
     );
   }
 }

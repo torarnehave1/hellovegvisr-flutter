@@ -171,7 +171,7 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
       {
         'role': 'system',
         'content':
-            'You help draft concise Markdown content for a knowledge graph note. Use clear headings, short paragraphs, and bullets when helpful.'
+            'You help draft concise Markdown content for a knowledge graph note. Use clear headings, short paragraphs, and bullets when helpful.',
       },
       ..._aiMessages,
     ];
@@ -292,9 +292,25 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
           return;
         }
         bytes = result['bytes'] as Uint8List?;
+      } else if (_aiProvider == 'grok') {
+        final userId = await _authService.getUserId();
+        final result = await _aiChatService.generateGrokImage(
+          prompt: prompt,
+          userId: userId,
+        );
+        if (!mounted) return;
+        if (result['success'] != true) {
+          setState(() {
+            _aiImageError = result['error'] ?? 'Grok image failed';
+            _aiImageGenerating = false;
+          });
+          return;
+        }
+        bytes = result['bytes'] as Uint8List?;
       } else {
         setState(() {
-          _aiImageError = 'Image generation is available for Gemini or OpenAI.';
+          _aiImageError =
+              'Image generation is available for Gemini, OpenAI, or Grok.';
           _aiImageGenerating = false;
         });
         return;
@@ -351,7 +367,18 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
 
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'webm', 'mp4', '3gp', 'amr'],
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'ogg',
+        'opus',
+        'webm',
+        'mp4',
+        '3gp',
+        'amr',
+      ],
     );
     if (picked == null || picked.files.isEmpty) return;
     final file = picked.files.first;
@@ -424,7 +451,8 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
     }
 
     final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final path =
+        '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
     await _recorder.start(
       const RecordConfig(
@@ -449,10 +477,8 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
     final selection = _contentController.selection;
     final start = selection.start >= 0 ? selection.start : text.length;
     final end = selection.end >= 0 ? selection.end : text.length;
-    final newText = text.substring(0, start) +
-        markdownImage +
-        '\n' +
-        text.substring(end);
+    final newText =
+        '${text.substring(0, start)}$markdownImage\n${text.substring(end)}';
 
     _contentController.text = newText;
     _contentController.selection = TextSelection.collapsed(
@@ -492,15 +518,12 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
 
         final text = _contentController.text;
         final selection = _contentController.selection;
-        final start =
-            selection.start >= 0 ? selection.start : text.length;
+        final start = selection.start >= 0 ? selection.start : text.length;
         final end = selection.end >= 0 ? selection.end : text.length;
         final safeStart = start <= end ? start : end;
         final safeEnd = start <= end ? end : start;
-        final newText = text.substring(0, safeStart) +
-            markdownImage +
-            '\n' +
-            text.substring(safeEnd);
+        final newText =
+            '${text.substring(0, safeStart)}$markdownImage\n${text.substring(safeEnd)}';
 
         _contentController.text = newText;
         _contentController.selection = TextSelection.collapsed(
@@ -543,8 +566,9 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
           ElevatedButton(
             onPressed: () {
               final url = _youtubeController.text.trim();
-              final normalizedUrl =
-                  _knowledgeGraphService.normalizeYouTubeUrl(url);
+              final normalizedUrl = _knowledgeGraphService.normalizeYouTubeUrl(
+                url,
+              );
 
               if (normalizedUrl != null) {
                 setState(() {
@@ -580,7 +604,9 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear content?'),
-        content: const Text('This removes the current content from the editor.'),
+        content: const Text(
+          'This removes the current content from the editor.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -662,7 +688,8 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
           IconButton(
             icon: const Icon(Icons.smart_toy_outlined),
             tooltip: 'Open AI Assistant',
-            onPressed: () => context.push('/graph-ai?graphId=${widget.graphId}'),
+            onPressed: () =>
+                context.push('/graph-ai?graphId=${widget.graphId}'),
           ),
         ],
       ),
@@ -693,21 +720,26 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                     runSpacing: 8,
                     children: [
                       ElevatedButton.icon(
-                        onPressed:
-                            (_uploading || _saving) ? null : _pickAndUploadImage,
+                        onPressed: (_uploading || _saving)
+                            ? null
+                            : _pickAndUploadImage,
                         icon: _uploading
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.image),
                         label: Text(_uploading ? 'Uploading...' : 'Add Image'),
                       ),
                       ElevatedButton.icon(
                         onPressed: _saving ? null : _addYouTubeVideo,
-                        icon:
-                            const Icon(Icons.play_circle_fill, color: Colors.red),
+                        icon: const Icon(
+                          Icons.play_circle_fill,
+                          color: Colors.red,
+                        ),
                         label: const Text('Add YouTube'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade50,
@@ -778,10 +810,7 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Supports Markdown: **bold**, *italic*, # headings, - lists, ```code blocks```, ![alt](url) for images',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 16),
 
@@ -797,10 +826,14 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                         const Icon(Icons.smart_toy_outlined),
                         const SizedBox(width: 8),
                         const Expanded(
-                          child: Text('AI Assistant is now available in its own screen.'),
+                          child: Text(
+                            'AI Assistant is now available in its own screen.',
+                          ),
                         ),
                         TextButton(
-                          onPressed: () => context.push('/graph-ai?graphId=${widget.graphId}'),
+                          onPressed: () => context.push(
+                            '/graph-ai?graphId=${widget.graphId}',
+                          ),
                           child: const Text('Open'),
                         ),
                       ],
@@ -812,7 +845,9 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Public edit'),
-                    subtitle: const Text('Anyone with the link can edit this graph'),
+                    subtitle: const Text(
+                      'Anyone with the link can edit this graph',
+                    ),
                     value: _publicEdit,
                     onChanged: _saving
                         ? null
@@ -892,14 +927,17 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                                     'https://www.vegvisr.org/gnew-viewer?graphId=${widget.graphId}';
                                 final url = Uri.parse(graphUrl);
                                 final messenger = ScaffoldMessenger.of(context);
-                                launchUrl(url,
-                                        mode: LaunchMode.externalApplication)
-                                    .catchError((_) {
+                                launchUrl(
+                                  url,
+                                  mode: LaunchMode.externalApplication,
+                                ).catchError((_) {
                                   Clipboard.setData(
-                                      ClipboardData(text: graphUrl));
+                                    ClipboardData(text: graphUrl),
+                                  );
                                   messenger.showSnackBar(
                                     const SnackBar(
-                                        content: Text('URL copied to clipboard')),
+                                      content: Text('URL copied to clipboard'),
+                                    ),
                                   );
                                   return false;
                                 });

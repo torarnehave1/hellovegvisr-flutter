@@ -1,4 +1,4 @@
-package com.example.hallo_vegvisr
+package org.vegvisr.hallo
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -237,10 +237,7 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
           final Widget? subtitleWidget = createdAt.isNotEmpty
               ? Text(
                   createdAt,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 )
               : isPublic
               ? const Text(
@@ -313,7 +310,10 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
                       ),
                       if (!isPublic)
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
                           onPressed: () => _deleteGraph(graphId, title),
                           tooltip: 'Delete',
                         ),

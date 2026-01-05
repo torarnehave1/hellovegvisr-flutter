@@ -58,8 +58,10 @@ class _AiSettingsScreenState extends State<AiSettingsScreen> {
             const SizedBox(height: 8),
             _buildSectionHeader('AI Assistant'),
             SwitchListTile(
-              secondary:
-                  const Icon(Icons.smart_toy_outlined, color: Color(0xFF4f6d7a)),
+              secondary: const Icon(
+                Icons.smart_toy_outlined,
+                color: Color(0xFF4f6d7a),
+              ),
               title: const Text('Enable AI Chat'),
               subtitle: const Text('Use AI assistance when creating graphs'),
               value: _aiEnabled,

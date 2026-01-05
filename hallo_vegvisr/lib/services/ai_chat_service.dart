@@ -18,8 +18,9 @@ class AiChatService {
     try {
       if (provider == 'gemini') {
         final prompt = _buildGeminiPrompt(messages);
-        final model = FirebaseAI.googleAI()
-            .generativeModel(model: 'gemini-2.5-flash');
+        final model = FirebaseAI.googleAI().generativeModel(
+          model: 'gemini-2.5-flash',
+        );
         final response = await model.generateContent([Content.text(prompt)]);
         final text = response.text?.trim() ?? '';
         return {
@@ -52,15 +53,9 @@ class AiChatService {
         };
       }
 
-      return {
-        'success': false,
-        'error': data['error'] ?? 'AI request failed',
-      };
+      return {'success': false, 'error': data['error'] ?? 'AI request failed'};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -106,10 +101,7 @@ class AiChatService {
           ? data['data'][0] as Map<String, dynamic>?
           : null;
       if (imageData == null) {
-        return {
-          'success': false,
-          'error': 'OpenAI did not return image data',
-        };
+        return {'success': false, 'error': 'OpenAI did not return image data'};
       }
 
       Uint8List? bytes;
@@ -134,15 +126,9 @@ class AiChatService {
         bytes = imageResponse.bodyBytes;
       }
 
-      return {
-        'success': true,
-        'bytes': bytes,
-      };
+      return {'success': true, 'bytes': bytes};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'OpenAI image error: $e',
-      };
+      return {'success': false, 'error': 'OpenAI image error: $e'};
     }
   }
 
@@ -176,19 +162,13 @@ class AiChatService {
           ? data['data'][0] as Map<String, dynamic>?
           : null;
       if (imageData == null) {
-        return {
-          'success': false,
-          'error': 'Grok did not return image data',
-        };
+        return {'success': false, 'error': 'Grok did not return image data'};
       }
 
       // Grok returns JPG images at imgen.x.ai
       final url = imageData['url']?.toString();
       if (url == null || url.isEmpty) {
-        return {
-          'success': false,
-          'error': 'Grok did not return image URL',
-        };
+        return {'success': false, 'error': 'Grok did not return image URL'};
       }
 
       final imageResponse = await http.get(Uri.parse(url));
@@ -202,13 +182,11 @@ class AiChatService {
       return {
         'success': true,
         'bytes': imageResponse.bodyBytes,
-        'revised_prompt': imageData['revised_prompt'], // Grok provides enhanced prompts
+        'revised_prompt':
+            imageData['revised_prompt'], // Grok provides enhanced prompts
       };
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'Grok image error: $e',
-      };
+      return {'success': false, 'error': 'Grok image error: $e'};
     }
   }
 
@@ -233,10 +211,7 @@ class AiChatService {
       String ext = filePath.split('.').last.toLowerCase();
       return await _uploadTranscription(filePath, userId, allowed, ext);
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'OpenAI transcription error: $e',
-      };
+      return {'success': false, 'error': 'OpenAI transcription error: $e'};
     }
   }
 
@@ -250,7 +225,8 @@ class AiChatService {
     if (contentType == null) {
       return {
         'success': false,
-        'error': 'Unsupported audio format. Please use: ${allowed.keys.join(', ')}',
+        'error':
+            'Unsupported audio format. Please use: ${allowed.keys.join(', ')}',
       };
     }
 
@@ -276,23 +252,18 @@ class AiChatService {
     if (response.statusCode != 200) {
       return {
         'success': false,
-        'error':
-            response.body.isNotEmpty ? response.body : 'OpenAI transcription failed',
+        'error': response.body.isNotEmpty
+            ? response.body
+            : 'OpenAI transcription failed',
       };
     }
 
     final data = jsonDecode(response.body);
     final text = (data['text'] ?? '').toString();
     if (text.isEmpty) {
-      return {
-        'success': false,
-        'error': 'No transcription text returned',
-      };
+      return {'success': false, 'error': 'No transcription text returned'};
     }
-    return {
-      'success': true,
-      'text': text,
-    };
+    return {'success': true, 'text': text};
   }
 
   Future<Map<String, dynamic>> analyzeOpenAiImage({
@@ -315,10 +286,10 @@ class AiChatService {
                 {'type': 'text', 'text': prompt},
                 {
                   'type': 'image_url',
-                  'image_url': {'url': 'data:$mimeType;base64,$base64Image'}
-                }
-              ]
-            }
+                  'image_url': {'url': 'data:$mimeType;base64,$base64Image'},
+                },
+              ],
+            },
           ],
           'max_tokens': 300,
         }),
@@ -334,8 +305,9 @@ class AiChatService {
       }
 
       final data = jsonDecode(response.body);
-      final content =
-          data['choices']?[0]?['message']?['content']?.toString().trim();
+      final content = data['choices']?[0]?['message']?['content']
+          ?.toString()
+          .trim();
       if (content == null || content.isEmpty) {
         return {
           'success': false,
@@ -343,15 +315,9 @@ class AiChatService {
         };
       }
 
-      return {
-        'success': true,
-        'message': content,
-      };
+      return {'success': true, 'message': content};
     } catch (e) {
-      return {
-        'success': false,
-        'error': 'OpenAI image analysis error: $e',
-      };
+      return {'success': false, 'error': 'OpenAI image analysis error: $e'};
     }
   }
 

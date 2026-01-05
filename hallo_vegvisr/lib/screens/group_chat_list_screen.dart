@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/group_chat_service.dart';
 
 class GroupChatListScreen extends StatefulWidget {
-  const GroupChatListScreen({Key? key}) : super(key: key);
+  const GroupChatListScreen({super.key});
 
   @override
   State<GroupChatListScreen> createState() => _GroupChatListScreenState();
@@ -18,6 +21,7 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
   String? _phone;
   String? _email;
   List<Map<String, dynamic>> _groups = [];
+  static const String _groupsCacheKey = 'cached_group_chats';
 
   @override
   void initState() {
@@ -26,6 +30,7 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
   }
 
   Future<void> _loadUser() async {
+    await _loadCachedGroups();
     final userId = await _authService.getUserId();
     final phone = await _authService.getPhone();
     final email = await _authService.getEmail();
@@ -37,32 +42,104 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
     await _loadGroups();
   }
 
+  Future<void> _loadCachedGroups() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cached = prefs.getString(_groupsCacheKey);
+    if (cached == null || cached.isEmpty) return;
+    try {
+      final data = jsonDecode(cached);
+      if (data is List) {
+        setState(() {
+          _groups = List<Map<String, dynamic>>.from(data);
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      // Ignore cache errors
+    }
+  }
+
   Future<void> _loadGroups() async {
     if (_userId == null || _phone == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Missing user session. Please log in again.')),
+          const SnackBar(
+            content: Text('Missing user session. Please log in again.'),
+          ),
         );
       }
       return;
     }
-    setState(() {
-      _loading = true;
-    });
+    if (_groups.isEmpty) {
+      setState(() {
+        _loading = true;
+      });
+    }
     try {
+      final since = _groups.isEmpty
+          ? null
+          : _groups
+                .map((g) => g['updated_at'])
+                .whereType<int>()
+                .fold<int?>(
+                  null,
+                  (maxValue, value) => maxValue == null
+                      ? value
+                      : (value > maxValue ? value : maxValue),
+                );
       final groups = await _chatService.fetchGroups(
         userId: _userId!,
         phone: _phone!,
         email: _email,
+        since: since,
       );
-      setState(() {
-        _groups = groups;
-      });
+      if (since == null) {
+        setState(() {
+          _groups = groups;
+          _loading = false;
+        });
+      } else if (groups.isNotEmpty) {
+        final addedCount = groups.length;
+        final byId = {for (final g in _groups) g['id']: g};
+        for (final g in groups) {
+          final id = g['id'];
+          if (id != null) {
+            byId[id] = {...(byId[id] ?? {}), ...g};
+          }
+        }
+        final merged = byId.values.toList();
+        merged.sort((a, b) {
+          final aUpdated =
+              a['updated_at'] as int? ?? a['created_at'] as int? ?? 0;
+          final bUpdated =
+              b['updated_at'] as int? ?? b['created_at'] as int? ?? 0;
+          return bUpdated.compareTo(aUpdated);
+        });
+        setState(() {
+          _groups = merged;
+          _loading = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Updated $addedCount chat${addedCount == 1 ? '' : 's'}',
+              ),
+            ),
+          );
+        }
+      } else {
+        setState(() {
+          _loading = false;
+        });
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_groupsCacheKey, jsonEncode(_groups));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load groups: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load groups: $e')));
       }
     } finally {
       if (mounted) {
@@ -118,10 +195,20 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create group: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to create group: $e')));
       }
+    }
+  }
+
+  Future<void> _openPoweredByLink() async {
+    final uri = Uri.parse('https://vegvisr.org');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to open link')));
     }
   }
 
@@ -132,6 +219,10 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
         backgroundColor: const Color(0xFF4f6d7a),
         foregroundColor: Colors.white,
         title: const Text('Chats'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/?openDrawer=true'),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -144,7 +235,11 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
                 itemBuilder: (context, index) {
                   final group = _groups[index];
                   final name = group['name']?.toString() ?? 'Unnamed group';
-                  final imageUrl = group['image_url'] as String?;
+                  final rawImageUrl = group['image_url'] as String?;
+                  final imageUrl =
+                      rawImageUrl != null && rawImageUrl.trim().isNotEmpty
+                      ? rawImageUrl
+                      : null;
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: const Color(0xFF4f6d7a),
@@ -153,9 +248,7 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
                           ? NetworkImage(imageUrl)
                           : null,
                       child: imageUrl == null
-                          ? Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            )
+                          ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?')
                           : null,
                     ),
                     title: Text(name),
@@ -173,6 +266,20 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
                 },
               ),
             ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: InkWell(
+            onTap: _openPoweredByLink,
+            child: const Text(
+              'Powered by Vegvisr.org',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateGroupDialog,
         backgroundColor: const Color(0xFF4f6d7a),

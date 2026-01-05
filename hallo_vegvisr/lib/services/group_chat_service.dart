@@ -8,10 +8,12 @@ class GroupChatService {
     required String userId,
     required String phone,
     String? email,
+    int? since,
   }) async {
     final uri = Uri.parse(
       '$baseUrl/groups?user_id=${Uri.encodeComponent(userId)}&phone=${Uri.encodeComponent(phone)}'
-      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}'
+      '${since != null ? '&since=$since' : ''}',
     );
 
     final response = await http.get(uri);
@@ -55,12 +57,14 @@ class GroupChatService {
     String? email,
     int after = 0,
     int limit = 50,
+    bool latest = false,
   }) async {
     final uri = Uri.parse(
       '$baseUrl/groups/$groupId/messages?user_id=${Uri.encodeComponent(userId)}'
       '&phone=${Uri.encodeComponent(phone)}'
       '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}'
-      '&after=$after&limit=$limit',
+      '&after=$after&limit=$limit'
+      '${latest ? '&latest=1' : ''}',
     );
 
     final response = await http.get(uri);
@@ -92,6 +96,70 @@ class GroupChatService {
     final data = jsonDecode(response.body);
     if (response.statusCode != 201 || data['success'] != true) {
       throw Exception(data['error'] ?? 'Failed to send message');
+    }
+    return Map<String, dynamic>.from(data['message']);
+  }
+
+  Future<Map<String, dynamic>> sendVoiceMessage({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+    required String audioUrl,
+    int? audioDurationMs,
+    String? transcriptText,
+    String? transcriptLang,
+    String? transcriptionStatus,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/groups/$groupId/messages'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'type': 'voice',
+        'audio_url': audioUrl,
+        if (audioDurationMs != null) 'audio_duration_ms': audioDurationMs,
+        if (transcriptText != null) 'transcript_text': transcriptText,
+        if (transcriptLang != null) 'transcript_lang': transcriptLang,
+        if (transcriptionStatus != null) 'transcription_status': transcriptionStatus,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 201 || data['success'] != true) {
+      throw Exception(data['error'] ?? 'Failed to send voice message');
+    }
+    return Map<String, dynamic>.from(data['message']);
+  }
+
+  Future<Map<String, dynamic>> updateMessageTranscript({
+    required String groupId,
+    required int messageId,
+    required String userId,
+    required String phone,
+    String? email,
+    String? transcriptText,
+    String? transcriptLang,
+    String? transcriptionStatus,
+  }) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/groups/$groupId/messages/$messageId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        if (transcriptText != null) 'transcript_text': transcriptText,
+        if (transcriptLang != null) 'transcript_lang': transcriptLang,
+        if (transcriptionStatus != null) 'transcription_status': transcriptionStatus,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200 || data['success'] != true) {
+      throw Exception(data['error'] ?? 'Failed to update transcript');
     }
     return Map<String, dynamic>.from(data['message']);
   }

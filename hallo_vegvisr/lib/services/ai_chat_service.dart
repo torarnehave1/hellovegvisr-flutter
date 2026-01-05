@@ -7,6 +7,7 @@ import 'package:http_parser/http_parser.dart';
 class AiChatService {
   static const String _smsGatewayUrl = 'https://smsgway.vegvisr.org';
   static const String _openAiWorkerUrl = 'https://openai.vegvisr.org';
+  static const String _grokWorkerUrl = 'https://grok.vegvisr.org';
 
   Future<Map<String, dynamic>> sendMessage({
     required String phone,
@@ -86,7 +87,7 @@ class AiChatService {
           'prompt': prompt,
           'model': 'gpt-image-1',
           'size': '1024x1024',
-          'response_format': 'b64_json',
+          'response_format': 'url',
           if (userId != null && userId.isNotEmpty) 'userId': userId,
         }),
       );
@@ -101,15 +102,38 @@ class AiChatService {
       }
 
       final data = jsonDecode(response.body);
-      final b64 = data['data']?[0]?['b64_json'];
-      if (b64 == null) {
+      final imageData = (data['data'] as List?)?.isNotEmpty == true
+          ? data['data'][0] as Map<String, dynamic>?
+          : null;
+      if (imageData == null) {
         return {
           'success': false,
           'error': 'OpenAI did not return image data',
         };
       }
 
-      final bytes = base64Decode(b64);
+      Uint8List? bytes;
+      final b64 = imageData['b64_json'];
+      if (b64 is String && b64.isNotEmpty) {
+        bytes = base64Decode(b64);
+      } else {
+        final url = imageData['url']?.toString();
+        if (url == null || url.isEmpty) {
+          return {
+            'success': false,
+            'error': 'OpenAI did not return image data',
+          };
+        }
+        final imageResponse = await http.get(Uri.parse(url));
+        if (imageResponse.statusCode != 200) {
+          return {
+            'success': false,
+            'error': 'Failed to download image (${imageResponse.statusCode})',
+          };
+        }
+        bytes = imageResponse.bodyBytes;
+      }
+
       return {
         'success': true,
         'bytes': bytes,
@@ -118,6 +142,72 @@ class AiChatService {
       return {
         'success': false,
         'error': 'OpenAI image error: $e',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> generateGrokImage({
+    required String prompt,
+    String? userId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_grokWorkerUrl/images'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'prompt': prompt,
+          'model': 'grok-2-image',
+          'response_format': 'url',
+          if (userId != null && userId.isNotEmpty) 'userId': userId,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'Grok image request failed',
+        };
+      }
+
+      final data = jsonDecode(response.body);
+      final imageData = (data['data'] as List?)?.isNotEmpty == true
+          ? data['data'][0] as Map<String, dynamic>?
+          : null;
+      if (imageData == null) {
+        return {
+          'success': false,
+          'error': 'Grok did not return image data',
+        };
+      }
+
+      // Grok returns JPG images at imgen.x.ai
+      final url = imageData['url']?.toString();
+      if (url == null || url.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Grok did not return image URL',
+        };
+      }
+
+      final imageResponse = await http.get(Uri.parse(url));
+      if (imageResponse.statusCode != 200) {
+        return {
+          'success': false,
+          'error': 'Failed to download image (${imageResponse.statusCode})',
+        };
+      }
+
+      return {
+        'success': true,
+        'bytes': imageResponse.bodyBytes,
+        'revised_prompt': imageData['revised_prompt'], // Grok provides enhanced prompts
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Grok image error: $e',
       };
     }
   }
@@ -203,6 +293,66 @@ class AiChatService {
       'success': true,
       'text': text,
     };
+  }
+
+  Future<Map<String, dynamic>> analyzeOpenAiImage({
+    required Uint8List bytes,
+    required String prompt,
+    String? userId,
+    String mimeType = 'image/png',
+  }) async {
+    try {
+      final base64Image = base64Encode(bytes);
+      final response = await http.post(
+        Uri.parse('$_openAiWorkerUrl/gpt-4o'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'messages': [
+            {
+              'role': 'user',
+              'content': [
+                {'type': 'text', 'text': prompt},
+                {
+                  'type': 'image_url',
+                  'image_url': {'url': 'data:$mimeType;base64,$base64Image'}
+                }
+              ]
+            }
+          ],
+          'max_tokens': 300,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        return {
+          'success': false,
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'OpenAI image analysis failed',
+        };
+      }
+
+      final data = jsonDecode(response.body);
+      final content =
+          data['choices']?[0]?['message']?['content']?.toString().trim();
+      if (content == null || content.isEmpty) {
+        return {
+          'success': false,
+          'error': 'OpenAI did not return analysis text',
+        };
+      }
+
+      return {
+        'success': true,
+        'message': content,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'OpenAI image analysis error: $e',
+      };
+    }
   }
 
   // Conversion removed for stability; expect supported formats only.

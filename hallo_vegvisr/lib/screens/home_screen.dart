@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key, this.openDrawer = false}) : super(key: key);
+  const HomeScreen({super.key, this.openDrawer = false});
 
   final bool openDrawer;
 
@@ -59,6 +60,16 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Logged out')));
       context.go('/login');
+    }
+  }
+
+  Future<void> _openPoweredByLink() async {
+    final uri = Uri.parse('https://vegvisr.org');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unable to open link')));
     }
   }
 
@@ -300,6 +311,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 _buildDrawerItem(
+                  icon: Icons.smart_toy_outlined,
+                  title: 'AI Settings',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/ai-settings');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.smart_toy,
+                  title: 'AI Assistant',
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.push('/graph-ai');
+                  },
+                ),
+                _buildDrawerItem(
                   icon: Icons.people_outline,
                   title: 'Invite Friends',
                   onTap: () {
@@ -321,31 +348,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
+                const Divider(),
                 _buildDrawerItem(
-                  icon: Icons.bug_report_outlined,
-                  title: 'FCM Debug (token)',
+                  icon: Icons.logout,
+                  title: 'Logout',
+                  iconColor: Colors.red,
+                  textColor: Colors.red,
                   onTap: () {
                     Navigator.pop(context);
-                    context.push('/debug/fcm-token');
+                    _logout();
                   },
                 ),
+                // Add bottom padding to ensure logout is visible above system navigation
+                const SizedBox(height: 32),
               ],
             ),
           ),
-
-          // Logout at bottom
-          const Divider(height: 1),
-          _buildDrawerItem(
-            icon: Icons.logout,
-            title: 'Logout',
-            iconColor: Colors.red,
-            textColor: Colors.red,
-            onTap: () {
-              Navigator.pop(context);
-              _logout();
-            },
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: InkWell(
+              onTap: _openPoweredByLink,
+              child: const Text(
+                'Powered by Vegvisr.org',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );

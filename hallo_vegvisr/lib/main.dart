@@ -13,10 +13,12 @@ import 'screens/my_graphs_screen.dart';
 import 'screens/edit_graph_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/ai_settings_screen.dart';
 import 'screens/group_chat_list_screen.dart';
 import 'screens/group_chat_screen.dart';
 import 'screens/group_info_screen.dart';
 import 'screens/join_group_screen.dart';
+import 'screens/graph_ai_screen.dart';
 import 'screens/debug_fcm_token_screen.dart';
 import 'services/push_notification_service.dart';
 
@@ -76,10 +78,10 @@ class _MyAppState extends State<MyApp> {
       return; // Skip if Firebase is not configured
     }
 
-    await _pushService!.initialize(userInfoProvider: _getUserInfoForPush);
+    await _pushService.initialize(userInfoProvider: _getUserInfoForPush);
 
     // Handle foreground messages (debug visibility)
-    _pushService!.setupForegroundHandler(
+    _pushService.setupForegroundHandler(
       onMessage: (message) {
         debugPrint(
           'FCM foreground message: ${message.data} | ${message.notification}',
@@ -90,7 +92,7 @@ class _MyAppState extends State<MyApp> {
         _messengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text(
-              '$title: ${body.length > 80 ? body.substring(0, 80) + '…' : body}',
+              '$title: ${body.length > 80 ? '${body.substring(0, 80)}…' : body}',
             ),
           ),
         );
@@ -98,7 +100,7 @@ class _MyAppState extends State<MyApp> {
     );
 
     // Handle notification tap when app was in background
-    _pushService!.setupMessageOpenedAppHandler((message) {
+    _pushService.setupMessageOpenedAppHandler((message) {
       debugPrint('FCM onMessageOpenedApp: ${message.data}');
       final data = message.data;
       final groupId = data['group_id'];
@@ -109,7 +111,7 @@ class _MyAppState extends State<MyApp> {
     });
 
     // Check if app was opened from a notification
-    final initialMessage = await _pushService!.getInitialMessage();
+    final initialMessage = await _pushService.getInitialMessage();
     if (initialMessage != null) {
       final data = initialMessage.data;
       final groupId = data['group_id'];
@@ -191,6 +193,10 @@ class _MyAppState extends State<MyApp> {
           builder: (context, state) => const SettingsScreen(),
         ),
         GoRoute(
+          path: '/ai-settings',
+          builder: (context, state) => const AiSettingsScreen(),
+        ),
+        GoRoute(
           path: '/group-chats',
           builder: (context, state) => const GroupChatListScreen(),
         ),
@@ -208,6 +214,13 @@ class _MyAppState extends State<MyApp> {
             final groupId = state.pathParameters['groupId']!;
             final groupName = state.extra as String?;
             return GroupInfoScreen(groupId: groupId, groupName: groupName);
+          },
+        ),
+        GoRoute(
+          path: '/graph-ai',
+          builder: (context, state) {
+            final graphId = state.uri.queryParameters['graphId'];
+            return GraphAiScreen(graphId: graphId);
           },
         ),
         GoRoute(

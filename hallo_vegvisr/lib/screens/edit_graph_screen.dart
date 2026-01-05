@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
@@ -130,6 +131,10 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
         }
         _loading = false;
       });
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('active_graph_id', widget.graphId);
+      await prefs.setString('active_graph_title', graph['title'] ?? '');
     } else {
       setState(() {
         _error = result['error'] ?? 'Failed to load graph';
@@ -567,6 +572,34 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
     });
   }
 
+  Future<void> _confirmClearContent() async {
+    if (_contentController.text.trim().isEmpty) {
+      return;
+    }
+    final shouldClear = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear content?'),
+        content: const Text('This removes the current content from the editor.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (shouldClear == true && mounted) {
+      setState(() {
+        _contentController.clear();
+      });
+    }
+  }
+
   Future<void> _updateGraph() async {
     if (_titleController.text.trim().isEmpty) {
       setState(() => _error = 'Please enter a title');
@@ -625,6 +658,13 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
       appBar: AppBar(
         title: const Text('Edit Graph'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.smart_toy_outlined),
+            tooltip: 'Open AI Assistant',
+            onPressed: () => context.push('/graph-ai?graphId=${widget.graphId}'),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -648,7 +688,9 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                   const SizedBox(height: 16),
 
                   // Toolbar
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       ElevatedButton.icon(
                         onPressed:
@@ -662,7 +704,6 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                             : const Icon(Icons.image),
                         label: Text(_uploading ? 'Uploading...' : 'Add Image'),
                       ),
-                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: _saving ? null : _addYouTubeVideo,
                         icon:
@@ -711,6 +752,16 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                   const SizedBox(height: 8),
 
                   // Content field
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: (_saving || _uploading)
+                          ? null
+                          : _confirmClearContent,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Clear content'),
+                    ),
+                  ),
                   TextField(
                     controller: _contentController,
                     decoration: InputDecoration(
@@ -734,309 +785,27 @@ class _EditGraphScreenState extends State<EditGraphScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  if (_enableAiChat)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        border: Border.all(color: Colors.blue.shade200),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.smart_toy, color: Colors.blue.shade700),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'AI Assistant (${_aiProvider == 'grok' ? 'Grok' : _aiProvider == 'gemini' ? 'Gemini' : 'OpenAI'})',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue.shade700,
-                                  ),
-                                ),
-                              ),
-                              if (_aiSending)
-                                const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 220,
-                            child: _aiMessages.isEmpty
-                                ? Center(
-                                    child: Text(
-                                      'Ask the AI to draft your content...',
-                                      style: TextStyle(color: Colors.grey.shade600),
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    controller: _aiScrollController,
-                                    itemCount: _aiMessages.length,
-                                    itemBuilder: (context, index) {
-                                      final msg = _aiMessages[index];
-                                      final isUser = msg['role'] == 'user';
-                                      return Align(
-                                        alignment: isUser
-                                            ? Alignment.centerRight
-                                            : Alignment.centerLeft,
-                                        child: Container(
-                                          margin: const EdgeInsets.symmetric(vertical: 4),
-                                          padding: const EdgeInsets.all(10),
-                                          constraints:
-                                              const BoxConstraints(maxWidth: 260),
-                                          decoration: BoxDecoration(
-                                            color: isUser
-                                                ? Colors.blue.shade100
-                                                : Colors.white,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: Colors.blue.shade100,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            msg['content'] ?? '',
-                                            style: const TextStyle(fontSize: 13),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                          if (_aiError.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _aiError,
-                              style: TextStyle(
-                                  color: Colors.red.shade700, fontSize: 12),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _aiInputController,
-                                  textInputAction: TextInputAction.send,
-                                  onSubmitted: (_) => _sendAiMessage(),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Ask the AI...',
-                                    isDense: true,
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  enabled: !_aiSending,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: _aiSending ? null : _sendAiMessage,
-                                child: const Text('Send'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _aiMessages.isEmpty
-                                      ? null
-                                      : () => _insertLatestAiMessage(append: true),
-                                  child: const Text('Insert last reply'),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              OutlinedButton(
-                                onPressed: _aiMessages.isEmpty
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _aiMessages = [];
-                                          _aiError = '';
-                                        });
-                                      },
-                                child: const Text('Clear'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed:
-                                      _aiImageGenerating ? null : _generateAiImage,
-                                  icon: _aiImageGenerating
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2),
-                                        )
-                                      : const Icon(Icons.image_outlined),
-                                  label: Text(
-                                    _aiImageGenerating
-                                        ? 'Generating...'
-                                        : 'Generate image',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_aiProvider == 'openai') ...[
-                            const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                    onPressed: _aiAudioTranscribing
-                                        ? null
-                                        : _transcribeAiAudio,
-                                    icon: _aiAudioTranscribing
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.mic_none),
-                                    label: Text(
-                                      _aiAudioTranscribing
-                                          ? 'Transcribing...'
-                                          : 'Transcribe audio',
-                                    ),
-                                  ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed:
-                                    _aiAudioTranscribing ? null : _toggleAiRecording,
-                                icon: Icon(_aiRecording ? Icons.stop : Icons.mic),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      _aiRecording ? Colors.red.shade300 : null,
-                                ),
-                                label: Text(_aiRecording ? 'Stop' : 'Record'),
-                              ),
-                            ],
-                          ),
-                          ],
-                          if (_aiImageError.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _aiImageError,
-                              style: TextStyle(
-                                  color: Colors.red.shade700, fontSize: 12),
-                            ),
-                          ],
-                          if (_aiAudioError.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _aiAudioError,
-                              style: TextStyle(
-                                  color: Colors.red.shade700, fontSize: 12),
-                            ),
-                          ],
-                          if (_aiImageBytes != null) ...[
-                            const SizedBox(height: 8),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.memory(
-                                _aiImageBytes!,
-                                height: 140,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            OutlinedButton(
-                              onPressed: _aiImageUrl == null
-                                  ? null
-                                  : () {
-                                      _insertImageMarkdown(
-                                        _aiImageUrl!,
-                                        _aiInputController.text.trim(),
-                                      );
-                                    },
-                              child: const Text('Insert image into content'),
-                            ),
-                          ],
-                          if (_aiAudioText.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.blue.shade100),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (_aiAudioFileName.isNotEmpty)
-                                    Text(
-                                      _aiAudioFileName,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    _aiAudioText,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            OutlinedButton(
-                              onPressed: () {
-                                final text = _contentController.text;
-                                final selection = _contentController.selection;
-                                final insertText = '\n\n$_aiAudioText';
-                                final start = selection.start >= 0
-                                    ? selection.start
-                                    : text.length;
-                                final end = selection.end >= 0
-                                    ? selection.end
-                                    : text.length;
-                                final newText = text.substring(0, start) +
-                                    insertText +
-                                    text.substring(end);
-                                _contentController.text = newText;
-                                _contentController.selection =
-                                    TextSelection.collapsed(
-                                  offset: start + insertText.length,
-                                );
-                              },
-                              child: const Text(
-                                  'Insert transcription into content'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Enable AI Assistant in Settings to chat while editing.',
-                        style:
-                            TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
                     ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.smart_toy_outlined),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text('AI Assistant is now available in its own screen.'),
+                        ),
+                        TextButton(
+                          onPressed: () => context.push('/graph-ai?graphId=${widget.graphId}'),
+                          child: const Text('Open'),
+                        ),
+                      ],
+                    ),
+                  ),
 
                   const SizedBox(height: 16),
 

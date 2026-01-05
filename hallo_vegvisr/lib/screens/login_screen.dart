@@ -43,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
     setState(() {
-      _appVersion = '${info.version}+' + info.buildNumber;
+      _appVersion = '${info.version}+${info.buildNumber}';
     });
   }
 
@@ -112,9 +112,9 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login successful!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Login successful!')));
       // Navigate to home
       context.go('/');
     } else {
@@ -163,19 +163,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 24),
                 const Text(
                   'HALLO VEGVISR',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 if (_appVersion.isNotEmpty)
                   Text(
                     'v$_appVersion',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                 const SizedBox(height: 36),
                 if (_step == 'phone') ...[
@@ -186,10 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Norwegian numbers only (+47)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
                   TextField(
@@ -214,10 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.only(bottom: 16),
                       child: Text(
                         _error,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontSize: 14,
-                        ),
+                        style: const TextStyle(color: Colors.red, fontSize: 14),
                       ),
                     ),
                   ElevatedButton(
@@ -229,34 +217,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Send SMS Code'),
                   ),
                 ] else if (_step == 'code') ...[
-                  const Icon(
-                    Icons.sms,
-                    color: Colors.green,
-                    size: 64,
-                  ),
+                  const Icon(Icons.sms, color: Colors.green, size: 64),
                   const SizedBox(height: 24),
                   const Text(
                     'Enter verification code',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'We sent a 6-digit code to $_normalizedPhone',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 24),
                   if (_success.isNotEmpty)
@@ -296,10 +272,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.only(bottom: 16),
                       child: Text(
                         _error,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontSize: 14,
-                        ),
+                        style: const TextStyle(color: Colors.red, fontSize: 14),
                       ),
                     ),
                   ElevatedButton(
@@ -311,9 +284,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Verify Code'),
                   ),

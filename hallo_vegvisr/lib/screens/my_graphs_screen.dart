@@ -70,7 +70,9 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Graph'),
-        content: Text('Are you sure you want to delete "$title"?\n\nThis action cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete "$title"?\n\nThis action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -118,8 +120,18 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
     }
   }
 
+  Future<void> _copyGraphLink(String graphId) async {
+    if (graphId.isEmpty) return;
+    final graphUrl = KnowledgeGraphService.buildPublicGraphUrl(graphId);
+    await Clipboard.setData(ClipboardData(text: graphUrl));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));
+  }
+
   void _openGraph(String graphId) {
-    final graphUrl = 'https://www.vegvisr.org/gnew-viewer?graphId=$graphId';
+    final graphUrl = KnowledgeGraphService.buildPublicGraphUrl(graphId);
     final url = Uri.parse(graphUrl);
     final messenger = ScaffoldMessenger.of(context);
 
@@ -148,6 +160,10 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
       appBar: AppBar(
         title: const Text('My Graphs'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/?openDrawer=true'),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -169,9 +185,7 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_error.isNotEmpty) {
@@ -220,6 +234,24 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
           final graphId = graph['id'] ?? '';
           final isPublic = graph['isPublic'] == true;
           final createdAt = _formatDate(graph['createdAt']);
+          final Widget? subtitleWidget = createdAt.isNotEmpty
+              ? Text(
+                  createdAt,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                )
+              : isPublic
+              ? const Text(
+                  'Public dev graph • editable by everyone',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF8A6D3B),
+                    fontWeight: FontWeight.w600,
+                  ),
+                )
+              : null;
 
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -236,52 +268,57 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
                 ),
                 child: Icon(
                   isPublic ? Icons.public : Icons.account_tree,
-                  color: isPublic ? const Color(0xFF8A6D3B) : const Color(0xFF4f6d7a),
+                  color: isPublic
+                      ? const Color(0xFF8A6D3B)
+                      : const Color(0xFF4f6d7a),
                 ),
               ),
-              title: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: createdAt.isNotEmpty
-                  ? Text(
-                      createdAt,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    )
-                  : isPublic
-                      ? Text(
-                          'Public dev graph • editable by everyone',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: const Color(0xFF8A6D3B),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, color: Color(0xFF4f6d7a)),
-                    onPressed: () => context.push('/edit-graph/$graphId'),
-                    tooltip: 'Edit',
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.open_in_new),
-                    onPressed: () => _openGraph(graphId),
-                    tooltip: 'Open in browser',
+                  if (subtitleWidget != null) ...[
+                    const SizedBox(height: 4),
+                    subtitleWidget,
+                  ],
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.edit_outlined,
+                          color: Color(0xFF4f6d7a),
+                        ),
+                        onPressed: () => context.push('/edit-graph/$graphId'),
+                        tooltip: 'Edit',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.open_in_new),
+                        onPressed: () => _openGraph(graphId),
+                        tooltip: 'Open in browser',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy),
+                        onPressed: graphId.isEmpty
+                            ? null
+                            : () => _copyGraphLink(graphId),
+                        tooltip: 'Copy link',
+                      ),
+                      if (!isPublic)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _deleteGraph(graphId, title),
+                          tooltip: 'Delete',
+                        ),
+                    ],
                   ),
-                  if (!isPublic)
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _deleteGraph(graphId, title),
-                      tooltip: 'Delete',
-                    ),
                 ],
               ),
               onTap: () => context.push('/edit-graph/$graphId'),

@@ -17,11 +17,11 @@ curl -L -o /tmp/vegvisr_error.jpg "<IMAGE_URL>"
 3) Read the image to extract the error text:
 - Open the image locally and read the visible error message.
 
-## Runbook: Flutter AI image errors (Gemini/OpenAI)
+## Runbook: Flutter AI image errors (Gemini/OpenAI/Grok)
 
 1) Confirm the AI provider in Settings:
 - Settings → Enable AI Chat = ON
-- Settings → AI Provider = OpenAI or Gemini
+- Settings → AI Provider = OpenAI, Gemini, or Grok
 
 2) Confirm the AI Assistant panel exists in both screens:
 - Create Graph: `hallo_vegvisr/lib/screens/create_graph_screen.dart`
@@ -37,6 +37,12 @@ curl -L -o /tmp/vegvisr_error.jpg "<IMAGE_URL>"
 - Code: `hallo_vegvisr/lib/screens/create_graph_screen.dart` and
   `hallo_vegvisr/lib/screens/edit_graph_screen.dart`
 - Model: `imagen-3.0-generate-002`
+
+5) Grok image flow (worker):
+- Endpoint: `https://grok.vegvisr.org/images`
+- Code: `hallo_vegvisr/lib/services/ai_chat_service.dart` → `generateGrokImage()`
+- Model: `grok-2-image`
+- Returns JPG format from `imgen.x.ai`
 
 ## Runbook: upload APK to R2
 

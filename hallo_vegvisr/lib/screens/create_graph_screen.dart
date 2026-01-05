@@ -113,12 +113,12 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
         // Insert at cursor position or append
         final text = _contentController.text;
         final selection = _contentController.selection;
-        final start =
-            selection.start >= 0 ? selection.start : text.length;
+        final start = selection.start >= 0 ? selection.start : text.length;
         final end = selection.end >= 0 ? selection.end : text.length;
         final safeStart = start <= end ? start : end;
         final safeEnd = start <= end ? end : start;
-        final newText = text.substring(0, safeStart) +
+        final newText =
+            text.substring(0, safeStart) +
             markdownImage +
             '\n' +
             text.substring(safeEnd);
@@ -171,7 +171,7 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
       {
         'role': 'system',
         'content':
-            'You help draft concise Markdown content for a knowledge graph note. Use clear headings, short paragraphs, and bullets when helpful.'
+            'You help draft concise Markdown content for a knowledge graph note. Use clear headings, short paragraphs, and bullets when helpful.',
       },
       ..._aiMessages,
     ];
@@ -210,6 +210,15 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  Future<void> _copyToClipboard(String text) async {
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));
   }
 
   void _insertLatestAiMessage({bool append = true}) {
@@ -351,7 +360,18 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
 
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'webm', 'mp4', '3gp', 'amr'],
+      allowedExtensions: [
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'ogg',
+        'opus',
+        'webm',
+        'mp4',
+        '3gp',
+        'amr',
+      ],
     );
     if (picked == null || picked.files.isEmpty) return;
     final file = picked.files.first;
@@ -424,7 +444,8 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
     }
 
     final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final path =
+        '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
     await _recorder.start(
       const RecordConfig(
@@ -449,10 +470,8 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
     final selection = _contentController.selection;
     final start = selection.start >= 0 ? selection.start : text.length;
     final end = selection.end >= 0 ? selection.end : text.length;
-    final newText = text.substring(0, start) +
-        markdownImage +
-        '\n' +
-        text.substring(end);
+    final newText =
+        text.substring(0, start) + markdownImage + '\n' + text.substring(end);
 
     _contentController.text = newText;
     _contentController.selection = TextSelection.collapsed(
@@ -481,8 +500,9 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
           ElevatedButton(
             onPressed: () {
               final url = _youtubeController.text.trim();
-              final normalizedUrl =
-                  _knowledgeGraphService.normalizeYouTubeUrl(url);
+              final normalizedUrl = _knowledgeGraphService.normalizeYouTubeUrl(
+                url,
+              );
 
               if (normalizedUrl != null) {
                 setState(() {
@@ -595,7 +615,9 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
               runSpacing: 8,
               children: [
                 ElevatedButton.icon(
-                  onPressed: (_uploading || _saving) ? null : _pickAndUploadImage,
+                  onPressed: (_uploading || _saving)
+                      ? null
+                      : _pickAndUploadImage,
                   icon: _uploading
                       ? const SizedBox(
                           width: 16,
@@ -668,10 +690,7 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
             const SizedBox(height: 8),
             Text(
               'Supports Markdown: **bold**, *italic*, # headings, - lists, ```code blocks```, ![alt](url) for images',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
 
@@ -692,7 +711,11 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'AI Assistant (${_aiProvider == 'grok' ? 'Grok' : _aiProvider == 'gemini' ? 'Gemini' : 'OpenAI'})',
+                            'AI Assistant (${_aiProvider == 'grok'
+                                ? 'Grok'
+                                : _aiProvider == 'gemini'
+                                ? 'Gemini'
+                                : 'OpenAI'})',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Colors.blue.shade700,
@@ -728,9 +751,13 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                                       ? Alignment.centerRight
                                       : Alignment.centerLeft,
                                   child: Container(
-                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
                                     padding: const EdgeInsets.all(10),
-                                    constraints: const BoxConstraints(maxWidth: 260),
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 260,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: isUser
                                           ? Colors.blue.shade100
@@ -753,7 +780,10 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                       const SizedBox(height: 6),
                       Text(
                         _aiError,
-                        style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 8),
@@ -809,16 +839,22 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _aiImageGenerating ? null : _generateAiImage,
+                            onPressed: _aiImageGenerating
+                                ? null
+                                : _generateAiImage,
                             icon: _aiImageGenerating
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.image_outlined),
                             label: Text(
-                              _aiImageGenerating ? 'Generating...' : 'Generate image',
+                              _aiImageGenerating
+                                  ? 'Generating...'
+                                  : 'Generate image',
                             ),
                           ),
                         ),
@@ -838,7 +874,8 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                                       width: 16,
                                       height: 16,
                                       child: CircularProgressIndicator(
-                                          strokeWidth: 2),
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : const Icon(Icons.mic_none),
                               label: Text(
@@ -850,11 +887,14 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
-                            onPressed: _aiAudioTranscribing ? null : _toggleAiRecording,
+                            onPressed: _aiAudioTranscribing
+                                ? null
+                                : _toggleAiRecording,
                             icon: Icon(_aiRecording ? Icons.stop : Icons.mic),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  _aiRecording ? Colors.red.shade300 : null,
+                              backgroundColor: _aiRecording
+                                  ? Colors.red.shade300
+                                  : null,
                             ),
                             label: Text(_aiRecording ? 'Stop' : 'Record'),
                           ),
@@ -865,14 +905,20 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                       const SizedBox(height: 6),
                       Text(
                         _aiImageError,
-                        style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                     if (_aiAudioError.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
                         _aiAudioError,
-                        style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                     if (_aiImageBytes != null) ...[
@@ -933,17 +979,21 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                           final text = _contentController.text;
                           final selection = _contentController.selection;
                           final insertText = '\n\n$_aiAudioText';
-                          final start =
-                              selection.start >= 0 ? selection.start : text.length;
-                          final end =
-                              selection.end >= 0 ? selection.end : text.length;
-                          final newText = text.substring(0, start) +
+                          final start = selection.start >= 0
+                              ? selection.start
+                              : text.length;
+                          final end = selection.end >= 0
+                              ? selection.end
+                              : text.length;
+                          final newText =
+                              text.substring(0, start) +
                               insertText +
                               text.substring(end);
                           _contentController.text = newText;
-                          _contentController.selection = TextSelection.collapsed(
-                            offset: start + insertText.length,
-                          );
+                          _contentController.selection =
+                              TextSelection.collapsed(
+                                offset: start + insertText.length,
+                              );
                         },
                         child: const Text('Insert transcription into content'),
                       ),
@@ -1039,38 +1089,79 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      if (_result!['graphUrl'] != null) ...[
-                        const Text('View Graph:',
-                            style: TextStyle(fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 4),
-                        GestureDetector(
-                          onTap: () {
-                            final graphUrl = _result!['graphUrl'];
-                            final url = Uri.parse(graphUrl);
-                            final messenger = ScaffoldMessenger.of(context);
-                            launchUrl(url, mode: LaunchMode.externalApplication).catchError((_) {
-                              Clipboard.setData(ClipboardData(text: graphUrl));
-                              messenger.showSnackBar(
-                                const SnackBar(content: Text('URL copied to clipboard')),
-                              );
-                              return false;
-                            });
-                          },
-                          child: Text(
-                            _result!['graphUrl'],
-                            style: const TextStyle(
-                              color: Colors.blue,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      Text('Graph ID: ${_result!['graphId']}',
-                          style: const TextStyle(fontSize: 12)),
+                      Builder(
+                        builder: (context) {
+                          final rawGraphId = _result!['graphId'];
+                          final graphId = rawGraphId == null
+                              ? ''
+                              : rawGraphId.toString();
+                          final rawGraphUrl = _result!['graphUrl'];
+                          final graphUrl =
+                              (rawGraphUrl == null ||
+                                  rawGraphUrl.toString().isEmpty)
+                              ? (graphId.isEmpty
+                                    ? ''
+                                    : KnowledgeGraphService.buildPublicGraphUrl(
+                                        graphId,
+                                      ))
+                              : rawGraphUrl.toString();
+
+                          if (graphUrl.isEmpty) return const SizedBox.shrink();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Share link:',
+                                style: TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                graphUrl,
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 12,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      final url = Uri.parse(graphUrl);
+                                      launchUrl(
+                                        url,
+                                        mode: LaunchMode.externalApplication,
+                                      ).catchError((_) {
+                                        _copyToClipboard(graphUrl);
+                                        return false;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.open_in_new),
+                                    label: const Text('Open'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _copyToClipboard(graphUrl),
+                                    icon: const Icon(Icons.copy),
+                                    label: const Text('Copy link'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          );
+                        },
+                      ),
+                      Text(
+                        'Graph ID: ${_result!['graphId']}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
                       if (_result!['nodeId'] != null)
-                        Text('Node ID: ${_result!['nodeId']}',
-                            style: const TextStyle(fontSize: 12)),
+                        Text(
+                          'Node ID: ${_result!['nodeId']}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                     ],
                   ),
                 ),

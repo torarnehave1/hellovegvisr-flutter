@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:typed_data';
 
 class KnowledgeGraphService {
   static const String uploadApiUrl = 'https://api.vegvisr.org/upload';
   // SMS Gateway handles authentication and proxies to Knowledge Graph Worker
   static const String smsGatewayUrl = 'https://smsgway.vegvisr.org';
+
+  static String buildPublicGraphUrl(String graphId) =>
+      'https://www.vegvisr.org/gnew-viewer?graphId=$graphId';
 
   /// Upload an image to R2 storage
   /// Returns the public URL of the uploaded image
@@ -18,11 +20,7 @@ class KnowledgeGraphService {
     try {
       final request = http.MultipartRequest('POST', Uri.parse(uploadApiUrl));
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          imageBytes,
-          filename: fileName,
-        ),
+        http.MultipartFile.fromBytes('file', imageBytes, filename: fileName),
       );
 
       final streamedResponse = await request.send();
@@ -30,10 +28,7 @@ class KnowledgeGraphService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'url': data['url'],
-        };
+        return {'success': true, 'url': data['url']};
       } else {
         return {
           'success': false,
@@ -42,10 +37,7 @@ class KnowledgeGraphService {
       }
     } catch (e) {
       print('Upload image error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -94,10 +86,7 @@ class KnowledgeGraphService {
       }
     } catch (e) {
       print('Save to knowledge graph error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -108,7 +97,8 @@ class KnowledgeGraphService {
     // Pattern for youtube.com/watch?v=, youtu.be/, youtube.com/embed/, youtube.com/v/
     final patterns = [
       RegExp(
-          r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)'),
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)',
+      ),
       RegExp(r'^([a-zA-Z0-9_-]{11})$'), // Direct video ID
     ];
 
@@ -139,19 +129,13 @@ class KnowledgeGraphService {
       final response = await http.post(
         Uri.parse('$smsGatewayUrl/api/my-graphs'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone': phone,
-          'userId': userId,
-        }),
+        body: jsonEncode({'phone': phone, 'userId': userId}),
       );
 
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'graphs': data['graphs'] ?? [],
-        };
+        return {'success': true, 'graphs': data['graphs'] ?? []};
       } else {
         return {
           'success': false,
@@ -160,10 +144,7 @@ class KnowledgeGraphService {
       }
     } catch (e) {
       print('Get my graphs error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -199,10 +180,7 @@ class KnowledgeGraphService {
       }
     } catch (e) {
       print('Delete graph error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -213,7 +191,9 @@ class KnowledgeGraphService {
     String? userId,
   }) async {
     try {
-      debugPrint('[GetGraph] request graphId=$graphId userId=$userId phone=$phone');
+      debugPrint(
+        '[GetGraph] request graphId=$graphId userId=$userId phone=$phone',
+      );
       final response = await http.post(
         Uri.parse('$smsGatewayUrl/api/get-graph'),
         headers: {'Content-Type': 'application/json'},
@@ -224,14 +204,13 @@ class KnowledgeGraphService {
         }),
       );
 
-      debugPrint('[GetGraph] status=${response.statusCode} body=${response.body}');
+      debugPrint(
+        '[GetGraph] status=${response.statusCode} body=${response.body}',
+      );
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data['success'] == true) {
-        return {
-          'success': true,
-          'graph': data['graph'],
-        };
+        return {'success': true, 'graph': data['graph']};
       } else {
         return {
           'success': false,
@@ -240,10 +219,7 @@ class KnowledgeGraphService {
       }
     } catch (e) {
       print('Get graph error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -289,10 +265,7 @@ class KnowledgeGraphService {
       }
     } catch (e) {
       print('Update graph error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 }

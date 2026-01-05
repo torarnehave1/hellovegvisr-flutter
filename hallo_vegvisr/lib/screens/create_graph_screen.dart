@@ -118,10 +118,7 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
         final safeStart = start <= end ? start : end;
         final safeEnd = start <= end ? end : start;
         final newText =
-            text.substring(0, safeStart) +
-            markdownImage +
-            '\n' +
-            text.substring(safeEnd);
+            '${text.substring(0, safeStart)}$markdownImage\n${text.substring(safeEnd)}';
 
         _contentController.text = newText;
         _contentController.selection = TextSelection.collapsed(
@@ -301,9 +298,25 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
           return;
         }
         bytes = result['bytes'] as Uint8List?;
+      } else if (_aiProvider == 'grok') {
+        final userId = await _authService.getUserId();
+        final result = await _aiChatService.generateGrokImage(
+          prompt: prompt,
+          userId: userId,
+        );
+        if (!mounted) return;
+        if (result['success'] != true) {
+          setState(() {
+            _aiImageError = result['error'] ?? 'Grok image failed';
+            _aiImageGenerating = false;
+          });
+          return;
+        }
+        bytes = result['bytes'] as Uint8List?;
       } else {
         setState(() {
-          _aiImageError = 'Image generation is available for Gemini or OpenAI.';
+          _aiImageError =
+              'Image generation is available for Gemini, OpenAI, or Grok.';
           _aiImageGenerating = false;
         });
         return;
@@ -471,7 +484,7 @@ class _CreateGraphScreenState extends State<CreateGraphScreen> {
     final start = selection.start >= 0 ? selection.start : text.length;
     final end = selection.end >= 0 ? selection.end : text.length;
     final newText =
-        text.substring(0, start) + markdownImage + '\n' + text.substring(end);
+        '${text.substring(0, start)}$markdownImage\n${text.substring(end)}';
 
     _contentController.text = newText;
     _contentController.selection = TextSelection.collapsed(

@@ -1,7 +1,7 @@
     Play Console App Content (Step 2)
 
     1) Privacy policy
-    - URL: https://www.vegvisr.org/privacy (if different, replace with your live policy URL).
+    - URL: https://www.universi.no/graph/hallo-vegvisr-privacy-policy
     - Notes to ensure the policy covers:
     - Data collected: phone number (login), user ID, AI chat prompts/responses, knowledge graph content, image uploads, voice recordings/transcripts, device identifiers for push notifications.
     - Data use: authentication, syncing graphs, AI features, image generation/analysis, voice transcription, push notifications.

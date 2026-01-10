@@ -61,6 +61,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String? _phone;
   String? _email;
   String? _groupImageUrl;
+  int? _groupUpdatedAt;
   String? _myProfileImageUrl;
   bool _loading = true;
   bool _sending = false;
@@ -78,6 +79,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   String? _playingAudioUrl;
   bool _isPlayingAudio = false;
   final Set<int> _expandedVoiceMessages = {};
+
+  String? _cacheBustedImageUrl(String? url, int? updatedAt) {
+    if (url == null || url.isEmpty || updatedAt == null) return url;
+    final separator = url.contains('?') ? '&' : '?';
+    return '$url${separator}v=$updatedAt';
+  }
 
   @override
   void initState() {
@@ -141,6 +148,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       if (group != null && mounted) {
         setState(() {
           _groupImageUrl = group['image_url'] as String?;
+          _groupUpdatedAt = group['updated_at'] as int?;
         });
       }
     } catch (_) {
@@ -703,7 +711,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 radius: 18,
                 backgroundColor: Colors.white.withValues(alpha: 0.2),
                 backgroundImage: _groupImageUrl != null
-                    ? NetworkImage(_groupImageUrl!)
+                    ? NetworkImage(
+                        _cacheBustedImageUrl(
+                          _groupImageUrl,
+                          _groupUpdatedAt,
+                        )!,
+                      )
                     : null,
                 child: _groupImageUrl == null
                     ? Text(

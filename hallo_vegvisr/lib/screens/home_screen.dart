@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/auth_service.dart';
+import '../services/branding_service.dart';
+import '../services/invitation_service.dart';
+import '../main.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.openDrawer = false});
@@ -19,12 +24,28 @@ class _HomeScreenState extends State<HomeScreen> {
   final _authService = AuthService();
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerAutoOpened = false;
+  BrandingConfig _branding = BrandingConfig.defaultBranding();
 
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
+    _loadBranding();
     _maybeOpenDrawer();
+  }
+
+  Future<void> _loadBranding() async {
+    final phone = await _authService.getPhone();
+    if (phone != null) {
+      final branding = await BrandingService.fetchBrandingByPhone(phone);
+      if (mounted) {
+        setState(() {
+          _branding = branding;
+        });
+        // Update app theme using global function from main.dart
+        updateAppTheme(branding);
+      }
+    }
   }
 
   @override
@@ -73,6 +94,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Share invite link for the current brand
+  Future<void> _shareInviteLink() async {
+    // Only show if user has custom branding (belongs to a brand)
+    if (!_branding.hasCustomBranding || _branding.domain == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No brand to invite users to')),
+      );
+      return;
+    }
+
+    // Show loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Creating invite link...')),
+    );
+
+    // Create invitation via API
+    final result = await InvitationService.createInvitation(
+      domain: _branding.domain!,
+      phone: _userPhone!,
+    );
+
+    if (!mounted) return;
+
+    if (result['success'] == true) {
+      final inviteCode = result['inviteCode'];
+      final inviteUrl = 'https://vegvisr.org/join/$inviteCode';
+
+      // Share the invite link
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Join me on ${_branding.siteTitle ?? _branding.domain}!\n\n$inviteUrl',
+          subject: 'Invitation to ${_branding.siteTitle ?? _branding.domain}',
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['error'] ?? 'Failed to create invite'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   String _getInitials() {
     if (_userEmail != null && _userEmail!.isNotEmpty) {
       final parts = _userEmail!.split('@')[0].split('.');
@@ -87,14 +152,66 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'HV';
   }
 
+  /// Build the logo widget - uses mobileAppLogo if available, then logoUrl, otherwise default SVG
+  Widget _buildLogo() {
+    final logoUrl = _branding.effectiveMobileLogoUrl;
+    if (_branding.hasCustomBranding && logoUrl != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CachedNetworkImage(
+            imageUrl: logoUrl,
+            width: 140,
+            fit: BoxFit.contain,
+            placeholder: (context, url) => const CircularProgressIndicator(),
+            errorWidget: (context, url, error) => SvgPicture.asset(
+              'assets/Black.svg',
+              width: 140,
+              semanticsLabel: 'Vegvisr logo',
+            ),
+          ),
+          // Show "Powered by Hallo Vegvisr" below the branded logo
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Powered by ',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey[500],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              SvgPicture.asset(
+                'assets/Black.svg',
+                width: 60,
+                semanticsLabel: 'Vegvisr logo',
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+    return SvgPicture.asset(
+      'assets/Black.svg',
+      width: 140,
+      semanticsLabel: 'Vegvisr logo',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Use branding colors and title
+    final appBarColor = _branding.primaryColor;
+    final appTitle = _branding.siteTitle ?? 'Hallo Vegvisr';
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4f6d7a),
+        backgroundColor: appBarColor,
         foregroundColor: Colors.white,
-        title: const Text('Hallo Vegvisr'),
+        title: Text(appTitle),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -110,20 +227,35 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: _branding.hasCustomBranding ? Colors.white : const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(16),
+                boxShadow: _branding.hasCustomBranding
+                    ? [BoxShadow(color: Colors.grey.withValues(alpha: 0.3), blurRadius: 8)]
+                    : null,
               ),
-              child: SvgPicture.asset(
-                'assets/Black.svg',
-                width: 140,
-                semanticsLabel: 'Vegvisr logo',
-              ),
+              child: _buildLogo(),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'HALLO VEGVISR',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              appTitle.toUpperCase(),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
+            // Show slogan if available
+            if (_branding.slogan != null && _branding.slogan!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _branding.slogan!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: _branding.primaryColor.withValues(alpha: 0.8),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
             if (_userPhone != null) ...[
               const SizedBox(height: 12),
               Row(
@@ -149,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/create-graph'),
         tooltip: 'Create Graph',
-        backgroundColor: const Color(0xFF4f6d7a),
+        backgroundColor: appBarColor,
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),
       ),
@@ -157,6 +289,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDrawer() {
+    // Use branding colors for drawer
+    final primaryColor = _branding.primaryColor;
+    final secondaryColor = _branding.secondaryColor;
+
     return Drawer(
       child: Column(
         children: [
@@ -169,11 +305,11 @@ class _HomeScreenState extends State<HomeScreen> {
               right: 16,
               bottom: 16,
             ),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF4f6d7a), Color(0xFF3a5260)],
+                colors: [primaryColor, secondaryColor],
               ),
             ),
             child: Column(
@@ -331,11 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: 'Invite Friends',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Share feature coming soon'),
-                      ),
-                    );
+                    _shareInviteLink();
                   },
                 ),
                 _buildDrawerItem(
@@ -387,7 +519,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Color? textColor,
   }) {
     return ListTile(
-      leading: Icon(icon, color: iconColor ?? const Color(0xFF4f6d7a)),
+      leading: Icon(icon, color: iconColor ?? _branding.primaryColor),
       title: Text(
         title,
         style: TextStyle(fontSize: 16, color: textColor ?? Colors.black87),

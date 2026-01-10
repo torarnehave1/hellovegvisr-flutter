@@ -289,6 +289,13 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
                     runSpacing: 4,
                     children: [
                       IconButton(
+                        icon: const Icon(Icons.visibility_outlined),
+                        onPressed: graphId.isEmpty
+                            ? null
+                            : () => context.push('/view-graph/$graphId', extra: title),
+                        tooltip: 'View in app',
+                      ),
+                      IconButton(
                         icon: const Icon(
                           Icons.edit_outlined,
                           color: Color(0xFF4f6d7a),
@@ -298,8 +305,8 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.open_in_new),
-                        onPressed: () => _openGraph(graphId),
-                        tooltip: 'Open in browser',
+                        onPressed: graphId.isEmpty ? null : () => _openGraph(graphId),
+                        tooltip: 'Open in browser (external)',
                       ),
                       IconButton(
                         icon: const Icon(Icons.copy),

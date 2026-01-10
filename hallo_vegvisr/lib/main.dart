@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
+import 'services/branding_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/create_graph_screen.dart';
@@ -19,8 +20,11 @@ import 'screens/group_chat_screen.dart';
 import 'screens/group_info_screen.dart';
 import 'screens/join_group_screen.dart';
 import 'screens/graph_ai_screen.dart';
+import 'screens/graph_viewer_screen.dart';
 import 'screens/debug_fcm_token_screen.dart';
+import 'screens/join_invitation_screen.dart';
 import 'services/push_notification_service.dart';
+import 'services/invitation_service.dart';
 
 // Background message handler - must be top-level function
 @pragma('vm:entry-point')
@@ -30,6 +34,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 bool firebaseInitialized = false;
+
+// Global key to access app state for theme updates
+final GlobalKey<_MyAppState> _appStateKey = GlobalKey<_MyAppState>();
+
+/// Public function to update app theme from anywhere
+void updateAppTheme(BrandingConfig branding) {
+  _appStateKey.currentState?.updateTheme(branding);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,11 +78,34 @@ class _MyAppState extends State<MyApp> {
   final GlobalKey<ScaffoldMessengerState> _messengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
+  // Dynamic theme support
+  ThemeData _theme = BrandingService.generateTheme(BrandingConfig.defaultBranding());
+
+  /// Update theme from branding configuration
+  void updateTheme(BrandingConfig branding) {
+    setState(() {
+      _theme = BrandingService.generateTheme(branding);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _initRouter();
     _initPushNotifications();
+    _initBranding();
+  }
+
+  Future<void> _initBranding() async {
+    // Check if user is logged in and fetch branding
+    final loggedIn = await _authService.isLoggedIn();
+    if (loggedIn) {
+      final phone = await _authService.getPhone();
+      if (phone != null) {
+        final branding = await BrandingService.fetchBrandingByPhone(phone);
+        updateTheme(branding);
+      }
+    }
   }
 
   Future<void> _initPushNotifications() async {
@@ -178,6 +213,14 @@ class _MyAppState extends State<MyApp> {
           builder: (context, state) => const MyGraphsScreen(),
         ),
         GoRoute(
+          path: '/view-graph/:graphId',
+          builder: (context, state) {
+            final graphId = state.pathParameters['graphId']!;
+            final title = state.extra as String?;
+            return GraphViewerScreen(graphId: graphId, title: title);
+          },
+        ),
+        GoRoute(
           path: '/edit-graph/:graphId',
           builder: (context, state) {
             final graphId = state.pathParameters['graphId']!;
@@ -227,7 +270,18 @@ class _MyAppState extends State<MyApp> {
           path: '/join/:inviteCode',
           builder: (context, state) {
             final inviteCode = state.pathParameters['inviteCode']!;
+            // Brand invites start with 'inv_', group invites don't
+            if (inviteCode.startsWith('inv_')) {
+              return JoinInvitationScreen(inviteCode: inviteCode);
+            }
             return JoinGroupScreen(inviteCode: inviteCode);
+          },
+        ),
+        GoRoute(
+          path: '/brand-invite/:inviteCode',
+          builder: (context, state) {
+            final inviteCode = state.pathParameters['inviteCode']!;
+            return JoinInvitationScreen(inviteCode: inviteCode);
           },
         ),
         GoRoute(
@@ -240,15 +294,14 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Use dynamic title from branding
+    final title = BrandingService.currentBranding.siteTitle ?? 'Hallo Vegvisr';
+
     return MaterialApp.router(
+      key: _appStateKey,
       scaffoldMessengerKey: _messengerKey,
-      title: 'Hallo Vegvisr',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 20, 195, 17),
-        ),
-        useMaterial3: true,
-      ),
+      title: title,
+      theme: _theme,
       routerConfig: _router,
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
@@ -11,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/ai_chat_service.dart';
+import '../services/chat_history_service.dart';
 import '../services/knowledge_graph_service.dart';
 import '../services/voice_note_service.dart';
 
@@ -23,10 +25,32 @@ class GraphAiScreen extends StatefulWidget {
   State<GraphAiScreen> createState() => _GraphAiScreenState();
 }
 
+
+class _RemoteChatSession {
+  final String id;
+  final String title;
+  final String updatedAt;
+
+  const _RemoteChatSession({
+    required this.id,
+    required this.title,
+    required this.updatedAt,
+  });
+
+  static _RemoteChatSession fromJson(Map<String, dynamic> json) {
+    return _RemoteChatSession(
+      id: (json['id'] ?? '').toString(),
+      title: (json['title'] ?? 'Untitled session').toString(),
+      updatedAt: (json['updatedAt'] ?? '').toString(),
+    );
+  }
+}
+
 class _GraphAiScreenState extends State<GraphAiScreen> {
   final _authService = AuthService();
   final _knowledgeGraphService = KnowledgeGraphService();
   final _aiChatService = AiChatService();
+  final _chatHistoryService = ChatHistoryService();
   final _voiceNoteService = VoiceNoteService();
   final _aiInputController = TextEditingController();
   final _aiScrollController = ScrollController();
@@ -43,10 +67,14 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
   bool _saving = false;
   String _error = '';
 
+  String _lastSavedTitle = '';
+  String _lastSavedContent = '';
+
   bool _enableAiChat = true;
   String _aiProvider = 'grok';
   List<Map<String, String>> _aiMessages = [];
   bool _aiSending = false;
+  // ignore: unused_field
   bool _aiImageGenerating = false;
   String _aiImageError = '';
   Uint8List? _aiImageBytes;
@@ -55,8 +83,10 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
   bool _aiImageAnalyzing = false;
   String _aiImageAnalysisError = '';
   bool _aiAudioTranscribing = false;
+  // ignore: unused_field
   String _aiAudioError = '';
   String _aiAudioText = '';
+  // ignore: unused_field
   String _aiAudioFileName = '';
   bool _aiRecording = false;
   bool _voiceRecording = false;
@@ -67,6 +97,14 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
   int? _voiceDraftDurationMs;
   bool _voiceDraftPlaying = false;
 
+  List<_RemoteChatSession> _aiSessions = [];
+  String? _activeAiSessionId;
+  bool _aiSessionsLoading = false;
+  String _aiSessionsError = '';
+
+  Timer? _sessionsRefreshDebounce;
+  bool _sessionsRefreshInFlight = false;
+
   @override
   void initState() {
     super.initState();
@@ -74,8 +112,579 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     _loadActiveGraph();
   }
 
+  String? _sessionsGraphId() {
+    final id = _graphId;
+    if (id == null || id.trim().isEmpty) return null;
+    return id;
+  }
+
+  Future<Map<String, String>?> _historyAuth() async {
+    final userId = await _authService.getUserId();
+    if (userId == null || userId.trim().isEmpty) return null;
+    final email = await _authService.getEmail();
+    return {
+      'userId': userId,
+      'email': (email == null || email.trim().isEmpty)
+          ? 'anonymous@vegvisr.org'
+          : email,
+      'role': 'User',
+    };
+  }
+
+  String _activeSessionStorageKey({required String userId, required String graphId}) {
+    return 'graph_ai_active_session:$userId:$graphId';
+  }
+
+  Map<String, dynamic> _buildSessionMetadata() {
+    return {
+      'graphTitle': _graphTitle ?? 'Untitled Graph',
+    };
+  }
+
+  String _formatSessionTimestamp(String isoString) {
+    if (isoString.trim().isEmpty) return 'No activity yet';
+    try {
+      final dt = DateTime.parse(isoString).toLocal();
+      final now = DateTime.now();
+      final sameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      if (sameDay) return '$hh:$mm';
+      return '${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} $hh:$mm';
+    } catch (_) {
+      return isoString;
+    }
+  }
+
+  void _scheduleQuietSessionsRefresh() {
+    _sessionsRefreshDebounce?.cancel();
+    _sessionsRefreshDebounce = Timer(const Duration(milliseconds: 650), () {
+      _fetchRemoteSessionsQuietly();
+    });
+  }
+
+  Future<void> _fetchRemoteSessionsQuietly() async {
+    if (_sessionsRefreshInFlight) return;
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    _sessionsRefreshInFlight = true;
+    try {
+      final result = await _chatHistoryService.listSessions(
+        userId: auth['userId']!,
+        userEmail: auth['email']!,
+        userRole: auth['role']!,
+        graphId: graphId,
+      );
+
+      if (!mounted) return;
+      if (result['success'] == true) {
+        final raw = (result['sessions'] as List?) ?? const [];
+        final sessions = <_RemoteChatSession>[];
+        for (final item in raw) {
+          if (item is Map<String, dynamic>) {
+            sessions.add(_RemoteChatSession.fromJson(item));
+          } else if (item is Map) {
+            sessions.add(_RemoteChatSession.fromJson(Map<String, dynamic>.from(item)));
+          }
+        }
+
+        setState(() {
+          _aiSessions = sessions;
+          _aiSessionsError = '';
+        });
+      }
+    } finally {
+      _sessionsRefreshInFlight = false;
+    }
+  }
+
+  Future<void> _fetchRemoteSessions() async {
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    setState(() {
+      _aiSessionsLoading = true;
+      _aiSessionsError = '';
+    });
+
+    try {
+      final result = await _chatHistoryService.listSessions(
+        userId: auth['userId']!,
+        userEmail: auth['email']!,
+        userRole: auth['role']!,
+        graphId: graphId,
+      );
+
+      if (!mounted) return;
+      if (result['success'] == true) {
+        final raw = (result['sessions'] as List?) ?? const [];
+        final sessions = <_RemoteChatSession>[];
+        for (final item in raw) {
+          if (item is Map<String, dynamic>) {
+            sessions.add(_RemoteChatSession.fromJson(item));
+          } else if (item is Map) {
+            sessions.add(_RemoteChatSession.fromJson(Map<String, dynamic>.from(item)));
+          }
+        }
+
+        setState(() {
+          _aiSessions = sessions;
+        });
+      } else {
+        setState(() {
+          _aiSessionsError = (result['error'] ?? 'Failed to load sessions').toString();
+        });
+      }
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _aiSessionsLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadRemoteHistoryIfPossible() async {
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    await _fetchRemoteSessions();
+
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(
+      _activeSessionStorageKey(userId: auth['userId']!, graphId: graphId),
+    );
+
+    if (stored == null || stored.trim().isEmpty) {
+      setState(() {
+        _activeAiSessionId = null;
+        _aiMessages = [];
+      });
+      return;
+    }
+
+    if (!_aiSessions.any((s) => s.id == stored)) {
+      setState(() {
+        _activeAiSessionId = null;
+        _aiMessages = [];
+      });
+      return;
+    }
+
+    await _selectAiSession(stored);
+  }
+
+  Future<void> _ensureSessionForMessaging() async {
+    if (_activeAiSessionId != null && _activeAiSessionId!.trim().isNotEmpty) {
+      return;
+    }
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    final defaultTitle = _graphTitle ?? 'Graph Conversation';
+    final created = await _chatHistoryService.upsertSession(
+      userId: auth['userId']!,
+      userEmail: auth['email']!,
+      userRole: auth['role']!,
+      graphId: graphId,
+      provider: _aiProvider,
+      metadata: _buildSessionMetadata(),
+      title: defaultTitle,
+    );
+
+    if (!mounted) return;
+    if (created['success'] == true && created['session'] != null) {
+      final session = created['session'] as Map;
+      final sessionId = (session['id'] ?? '').toString();
+      if (sessionId.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _activeSessionStorageKey(userId: auth['userId']!, graphId: graphId),
+          sessionId,
+        );
+
+        setState(() {
+          _activeAiSessionId = sessionId;
+        });
+        await _fetchRemoteSessions();
+      }
+    }
+  }
+
+  Future<void> _persistChatMessageRemote({required String role, required String content}) async {
+    final sessionId = _activeAiSessionId;
+    if (sessionId == null || sessionId.trim().isEmpty) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    final res = await _chatHistoryService.persistMessage(
+      userId: auth['userId']!,
+      userEmail: auth['email']!,
+      userRole: auth['role']!,
+      sessionId: sessionId,
+      role: role,
+      content: content,
+      provider: role == 'assistant' ? _aiProvider : null,
+    );
+
+    if (res['success'] == true) {
+      _scheduleQuietSessionsRefresh();
+    }
+  }
+
+  Future<void> _startNewAiSession() async {
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    setState(() {
+      _aiSessionsLoading = true;
+      _aiSessionsError = '';
+      _aiMessages = [];
+      _activeAiSessionId = null;
+    });
+
+    final created = await _chatHistoryService.upsertSession(
+      userId: auth['userId']!,
+      userEmail: auth['email']!,
+      userRole: auth['role']!,
+      graphId: graphId,
+      provider: _aiProvider,
+      metadata: _buildSessionMetadata(),
+      title: _graphTitle ?? 'Graph Conversation',
+    );
+
+    if (!mounted) return;
+
+    if (created['success'] == true && created['session'] != null) {
+      final session = created['session'] as Map;
+      final sessionId = (session['id'] ?? '').toString();
+      if (sessionId.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _activeSessionStorageKey(userId: auth['userId']!, graphId: graphId),
+          sessionId,
+        );
+        setState(() {
+          _activeAiSessionId = sessionId;
+        });
+      }
+    } else {
+      setState(() {
+        _aiSessionsError = (created['error'] ?? 'Failed to create session').toString();
+      });
+    }
+
+    await _fetchRemoteSessions();
+    if (!mounted) return;
+    setState(() {
+      _aiSessionsLoading = false;
+    });
+  }
+
+  Future<void> _selectAiSession(String sessionId) async {
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    setState(() {
+      _aiSessionsLoading = true;
+      _aiSessionsError = '';
+      _activeAiSessionId = sessionId;
+      _aiMessages = [];
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _activeSessionStorageKey(userId: auth['userId']!, graphId: graphId),
+      sessionId,
+    );
+
+    final fetched = await _chatHistoryService.loadMessages(
+      userId: auth['userId']!,
+      userEmail: auth['email']!,
+      userRole: auth['role']!,
+      sessionId: sessionId,
+      limit: 200,
+      decrypt: true,
+    );
+
+    if (!mounted) return;
+
+    if (fetched['success'] == true) {
+      final raw = (fetched['messages'] as List?) ?? const [];
+      final msgs = <Map<String, String>>[];
+      for (final item in raw) {
+        if (item is Map) {
+          final role = item['role']?.toString() ?? '';
+          final content = item['content']?.toString() ?? '';
+          if (role.isNotEmpty && content.isNotEmpty) {
+            msgs.add({'role': role, 'content': content});
+          }
+        }
+      }
+      setState(() {
+        _aiMessages = msgs;
+      });
+    } else {
+      setState(() {
+        _aiSessionsError = (fetched['error'] ?? 'Failed to load chat history').toString();
+      });
+    }
+
+    setState(() {
+      _aiSessionsLoading = false;
+    });
+  }
+
+  Future<void> _renameAiSession(String sessionId, String title) async {
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+
+    setState(() {
+      _aiSessionsLoading = true;
+      _aiSessionsError = '';
+    });
+
+    final res = await _chatHistoryService.upsertSession(
+      userId: auth['userId']!,
+      userEmail: auth['email']!,
+      userRole: auth['role']!,
+      graphId: graphId,
+      provider: _aiProvider,
+      metadata: _buildSessionMetadata(),
+      sessionId: sessionId,
+      title: trimmed,
+    );
+
+    if (!mounted) return;
+    if (res['success'] != true) {
+      setState(() {
+        _aiSessionsError = (res['error'] ?? 'Failed to rename session').toString();
+      });
+    }
+
+    await _fetchRemoteSessions();
+    if (!mounted) return;
+    setState(() {
+      _aiSessionsLoading = false;
+    });
+  }
+
+  Future<void> _deleteAiSession(String sessionId) async {
+    final graphId = _sessionsGraphId();
+    if (graphId == null) return;
+    final auth = await _historyAuth();
+    if (auth == null) return;
+
+    setState(() {
+      _aiSessionsLoading = true;
+      _aiSessionsError = '';
+    });
+
+    final res = await _chatHistoryService.deleteSession(
+      userId: auth['userId']!,
+      userEmail: auth['email']!,
+      userRole: auth['role']!,
+      sessionId: sessionId,
+    );
+
+    if (!mounted) return;
+    if (res['success'] != true) {
+      setState(() {
+        _aiSessionsError = (res['error'] ?? 'Failed to delete session').toString();
+      });
+    } else {
+      if (_activeAiSessionId == sessionId) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(
+          _activeSessionStorageKey(userId: auth['userId']!, graphId: graphId),
+        );
+        setState(() {
+          _activeAiSessionId = null;
+          _aiMessages = [];
+        });
+      }
+    }
+
+    await _fetchRemoteSessions();
+    if (!mounted) return;
+    setState(() {
+      _aiSessionsLoading = false;
+    });
+  }
+
+  Future<void> _promptRenameSession(_RemoteChatSession session) async {
+    final controller = TextEditingController(text: session.title);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Session name'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'Enter a session name',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result != null) {
+      await _renameAiSession(session.id, result);
+    }
+  }
+
+  Future<void> _confirmDeleteSession(_RemoteChatSession session) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete session?'),
+          content: Text('Delete "${session.title}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (ok == true) {
+      await _deleteAiSession(session.id);
+    }
+  }
+
+  void _showAiSessionsSheet() {
+    if (_aiSessionsLoading) return;
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'AI Sessions',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await _startNewAiSession();
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text('New'),
+                    ),
+                  ],
+                ),
+                if (_aiSessionsError.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      _aiSessionsError,
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                  ),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _aiSessions.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final s = _aiSessions[index];
+                      final isActive = s.id == _activeAiSessionId;
+                      return ListTile(
+                        title: Text(
+                          s.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          'Updated ${_formatSessionTimestamp(s.updatedAt)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        leading: Icon(isActive ? Icons.check_circle : Icons.chat_bubble_outline),
+                        onTap: () async {
+                          Navigator.pop(context);
+                          await _selectAiSession(s.id);
+                        },
+                        trailing: Wrap(
+                          spacing: 8,
+                          children: [
+                            IconButton(
+                              tooltip: 'Rename',
+                              onPressed: () async {
+                                Navigator.pop(context);
+                                await _promptRenameSession(s);
+                              },
+                              icon: const Icon(Icons.edit),
+                            ),
+                            IconButton(
+                              tooltip: 'Delete',
+                              onPressed: () async {
+                                Navigator.pop(context);
+                                await _confirmDeleteSession(s);
+                              },
+                              icon: const Icon(Icons.delete_outline),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _sessionsRefreshDebounce?.cancel();
     _aiInputController.dispose();
     _aiScrollController.dispose();
     _contentController.dispose();
@@ -182,15 +791,23 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
         content = content.substring(0, footerIndex);
       }
 
+      final loadedTitle = (graph['title'] ?? activeGraphTitle ?? 'Untitled graph')
+          .toString();
+      final loadedContent = content;
+
       setState(() {
         _graphId = activeGraphId;
-        _graphTitle = graph['title'] ?? activeGraphTitle ?? 'Untitled graph';
-        _titleController.text = _graphTitle ?? '';
-        _contentController.text = content;
+        _graphTitle = loadedTitle;
+        _titleController.text = loadedTitle;
+        _contentController.text = loadedContent;
         _youtubeUrl = graph['youtubeUrl'];
         _publicEdit = graph['publicEdit'] == true;
+        _lastSavedTitle = loadedTitle.trim();
+        _lastSavedContent = loadedContent.trim();
         _loading = false;
       });
+
+      await _loadRemoteHistoryIfPossible();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Using active graph: ${_graphTitle ?? ''}')),
@@ -201,6 +818,11 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
         _error = result['error'] ?? 'Failed to load graph';
       });
     }
+  }
+
+  void _leaveAssistantAndOpenDrawer() {
+    if (!mounted) return;
+    context.go('/?openDrawer=true');
   }
 
   Future<void> _sendAiMessage() async {
@@ -245,6 +867,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
           {'role': 'user', 'content': prompt},
         ];
       });
+
+      await _ensureSessionForMessaging();
+      await _persistChatMessageRemote(role: 'user', content: prompt);
       await _generateAiImage(prompt);
       return;
     }
@@ -256,6 +881,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
         {'role': 'user', 'content': prompt},
       ];
     });
+
+    await _ensureSessionForMessaging();
+    await _persistChatMessageRemote(role: 'user', content: prompt);
 
     final messages = [
       {
@@ -284,6 +912,7 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
             {'role': 'assistant', 'content': reply},
           ];
         });
+        await _persistChatMessageRemote(role: 'assistant', content: reply);
       }
     } else {
       setState(() {
@@ -302,6 +931,7 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     }
   }
 
+  // ignore: unused_element
   void _insertLatestAiMessage({bool append = true}) {
     final last = _aiMessages.lastWhere(
       (msg) => msg['role'] == 'assistant',
@@ -723,7 +1353,6 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
   Future<void> _sendAiVoiceDraft() async {
     final path = _voiceDraftPath;
     if (path == null || _voiceSending) return;
-    final durationMs = _voiceDraftDurationMs;
 
     if (_voiceSending) return;
 
@@ -832,6 +1461,18 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
   Future<void> _updateGraph() async {
     if (_graphId == null) return;
 
+    final nextTitle = _titleController.text.trim().isEmpty
+        ? (_graphTitle ?? 'Untitled').trim()
+        : _titleController.text.trim();
+    final nextContent = _contentController.text.trim();
+
+    if (nextTitle == _lastSavedTitle && nextContent == _lastSavedContent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No changes to save')),
+      );
+      return;
+    }
+
     final phone = await _authService.getPhone();
     final userId = await _authService.getUserId();
 
@@ -851,10 +1492,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
       phone: phone,
       userId: userId,
       graphId: _graphId!,
-      title: _titleController.text.trim().isEmpty
-          ? (_graphTitle ?? 'Untitled')
-          : _titleController.text.trim(),
-      content: _contentController.text.trim(),
+      title: nextTitle,
+      content: nextContent,
       youtubeUrl: _youtubeUrl,
       publicEdit: _publicEdit,
     );
@@ -862,9 +1501,56 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     if (!mounted) return;
 
     if (result['success'] == true) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Graph updated')));
+      // Re-fetch once to ensure the backend actually persisted the update.
+      final fetched = await _knowledgeGraphService.getGraph(
+        phone: phone,
+        userId: userId,
+        graphId: _graphId!,
+      );
+
+      if (!mounted) return;
+
+      if (fetched['success'] == true) {
+        final graph = fetched['graph'] as Map<String, dynamic>;
+        String fetchedContent = (graph['content'] ?? '').toString();
+        final footerIndex = fetchedContent.lastIndexOf('\n\n---\n\n*Created by:');
+        if (footerIndex > 0) {
+          fetchedContent = fetchedContent.substring(0, footerIndex);
+        }
+
+        final fetchedTitle = (graph['title'] ?? '').toString().trim();
+        final fetchedTrimmedContent = fetchedContent.trim();
+
+        final matches = fetchedTitle == nextTitle &&
+            fetchedTrimmedContent == nextContent;
+
+        if (!matches) {
+          setState(() {
+            _error =
+                'Saved, but the graph did not refresh with the new content. Please try again.';
+          });
+        } else {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('active_graph_title', fetchedTitle);
+
+          setState(() {
+            _graphTitle = fetchedTitle;
+            _titleController.text = fetchedTitle;
+            _contentController.text = fetchedContent;
+            _lastSavedTitle = fetchedTitle;
+            _lastSavedContent = fetchedTrimmedContent;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Graph updated')),
+          );
+        }
+      } else {
+        setState(() {
+          _error =
+              'Graph updated, but reloading failed: ${fetched['error'] ?? 'unknown error'}';
+        });
+      }
     } else {
       setState(() {
         _error = result['error'] ?? 'Failed to update graph';
@@ -906,12 +1592,29 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'AI Assistant',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'AI Assistant',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Chat sessions',
+                onPressed: _sessionsGraphId() == null
+                    ? null
+                    : () async {
+                        await _fetchRemoteSessions();
+                        if (!mounted) return;
+                        _showAiSessionsSheet();
+                      },
+                icon: const Icon(Icons.folder_open),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -994,6 +1697,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
           Row(
             children: [
               IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                 icon: _voiceSending
                     ? const SizedBox(
                         width: 18,
@@ -1028,8 +1733,10 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
                   enabled: !_aiSending,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
                 icon: _aiSending
                     ? const SizedBox(
                         width: 18,
@@ -1216,89 +1923,101 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Assistant'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.open_in_new),
-            onPressed: _graphId == null ? null : _openGraphInBrowser,
-            tooltip: 'View in browser',
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        _leaveAssistantAndOpenDrawer();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+            onPressed: _leaveAssistantAndOpenDrawer,
           ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _graphId == null
-          ? Center(
-              child: Padding(
+          title: const Text('AI Assistant'),
+          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              onPressed: _graphId == null ? null : _openGraphInBrowser,
+              tooltip: 'View in browser',
+            ),
+          ],
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _graphId == null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error.isNotEmpty ? _error : 'Select a graph first.'),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => context.go('/my-graphs'),
+                        child: const Text('Open My Graphs'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(_error.isNotEmpty ? _error : 'Select a graph first.'),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => context.go('/my-graphs'),
-                      child: const Text('Open My Graphs'),
+                    Text(
+                      _graphTitle ?? 'Active Graph',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
+                    const SizedBox(height: 8),
+                    _buildAiPanel(),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _saving ? null : _updateGraph,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                        backgroundColor: const Color(0xFF4f6d7a),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Save to Graph'),
+                    ),
+                    if (_error.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            border: Border.all(color: Colors.red.shade200),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _error,
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    _graphTitle ?? 'Active Graph',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildAiPanel(),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _saving ? null : _updateGraph,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 48),
-                      backgroundColor: const Color(0xFF4f6d7a),
-                      foregroundColor: Colors.white,
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Save to Graph'),
-                  ),
-                  if (_error.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          border: Border.all(color: Colors.red.shade200),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _error,
-                          style: TextStyle(color: Colors.red.shade700),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+      ),
     );
   }
 }

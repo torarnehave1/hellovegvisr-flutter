@@ -41,4 +41,22 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
     end
   end
+
+  # ITMS-91061 (Missing privacy manifest): App Store Connect requires certain
+  # commonly used third-party SDKs to ship a PrivacyInfo.xcprivacy file.
+  # share_plus currently builds into share_plus.framework; we embed a minimal
+  # privacy manifest into that framework bundle as a resource.
+  privacy_manifest_path = File.join(__dir__, 'share_plus_privacy', 'PrivacyInfo.xcprivacy')
+  if File.exist?(privacy_manifest_path)
+    share_plus_target = installer.pods_project.targets.find { |t| t.name == 'share_plus' }
+    if share_plus_target
+      file_ref = installer.pods_project.main_group.find_file_by_path(privacy_manifest_path)
+      file_ref ||= installer.pods_project.main_group.new_file(privacy_manifest_path)
+
+      resources_phase = share_plus_target.resources_build_phase
+      unless resources_phase.files_references.include?(file_ref)
+        resources_phase.add_file_reference(file_ref)
+      end
+    end
+  end
 end

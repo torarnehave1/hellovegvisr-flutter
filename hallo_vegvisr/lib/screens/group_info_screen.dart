@@ -31,11 +31,18 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
   String? _email;
   String? _userRole;
   String? _groupImageUrl;
+  int? _groupUpdatedAt;
   bool _loading = true;
   bool _uploadingImage = false;
   List<Map<String, dynamic>> _members = [];
   String? _inviteLink;
   bool _creatingInvite = false;
+
+  String? _cacheBustedImageUrl(String? url, int? updatedAt) {
+    if (url == null || url.isEmpty || updatedAt == null) return url;
+    final separator = url.contains('?') ? '&' : '?';
+    return '$url${separator}v=$updatedAt';
+  }
 
   @override
   void initState() {
@@ -72,6 +79,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       if (group != null && mounted) {
         setState(() {
           _groupImageUrl = group['image_url'] as String?;
+          _groupUpdatedAt = group['updated_at'] as int?;
         });
       }
     } catch (_) {
@@ -299,7 +307,12 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                             radius: 45,
                             backgroundColor: Colors.white.withValues(alpha: 0.2),
                             backgroundImage: _groupImageUrl != null
-                                ? NetworkImage(_groupImageUrl!)
+                                ? NetworkImage(
+                                    _cacheBustedImageUrl(
+                                      _groupImageUrl,
+                                      _groupUpdatedAt,
+                                    )!,
+                                  )
                                 : null,
                             child: _groupImageUrl == null
                                 ? Text(

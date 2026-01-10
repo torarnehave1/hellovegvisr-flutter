@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'branding_service.dart';
 
 class AuthService {
   static const String smsApiUrl =
@@ -9,6 +10,16 @@ class AuthService {
   /// Send 6-digit SMS verification code to user's phone
   /// Phone number should be Norwegian format (8 digits or +47...)
   Future<Map<String, dynamic>> sendOtpCode(String phone) async {
+    // Demo/reviewer bypass: Skip SMS for demo phone number
+    if (phone == '+4712003400' || phone == '12003400') {
+      return {
+        'success': true,
+        'phone': '+4712003400',
+        'expires_at': DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
+        'message': 'Demo account - use code: 123456',
+      };
+    }
+
     try {
       final response = await http.post(
         Uri.parse('$smsApiUrl/api/auth/phone/send-code'),
@@ -45,6 +56,20 @@ class AuthService {
   /// Verify 6-digit SMS code
   /// Returns success with user data if verification succeeds
   Future<Map<String, dynamic>> verifyOtpCode(String phone, String code) async {
+    // Demo/reviewer bypass: Accept code 123456 for demo phone
+    if ((phone == '+4712003400' || phone == '12003400') && code == '123456') {
+      final demoData = {
+        'success': true,
+        'email': 'post@slowyou.net',
+        'phone': '+4712003400',
+        'verified_at': DateTime.now().millisecondsSinceEpoch,
+        'userId': 'demo-reviewer-user',
+        'user_id': 'demo-reviewer-user',
+      };
+      await _saveUser(demoData);
+      return demoData;
+    }
+
     try {
       final response = await http.post(
         Uri.parse('$smsApiUrl/api/auth/phone/verify-code'),
@@ -139,6 +164,8 @@ class AuthService {
     await prefs.remove('verified_at');
     await prefs.remove('profile_image_url');
     await prefs.setBool('logged_in', false);
+    // Clear branding cache on logout
+    BrandingService.clearBranding();
   }
 
   /// Get user profile from server (includes profile_image_url)

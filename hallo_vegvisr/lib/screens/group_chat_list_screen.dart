@@ -23,6 +23,12 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
   List<Map<String, dynamic>> _groups = [];
   static const String _groupsCacheKey = 'cached_group_chats';
 
+  String? _cacheBustedImageUrl(String? url, int? updatedAt) {
+    if (url == null || url.isEmpty || updatedAt == null) return url;
+    final separator = url.contains('?') ? '&' : '?';
+    return '$url${separator}v=$updatedAt';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -236,10 +242,12 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
                   final group = _groups[index];
                   final name = group['name']?.toString() ?? 'Unnamed group';
                   final rawImageUrl = group['image_url'] as String?;
-                  final imageUrl =
-                      rawImageUrl != null && rawImageUrl.trim().isNotEmpty
-                      ? rawImageUrl
-                      : null;
+                  final imageUrl = _cacheBustedImageUrl(
+                    rawImageUrl != null && rawImageUrl.trim().isNotEmpty
+                        ? rawImageUrl
+                        : null,
+                    group['updated_at'] as int?,
+                  );
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: const Color(0xFF4f6d7a),

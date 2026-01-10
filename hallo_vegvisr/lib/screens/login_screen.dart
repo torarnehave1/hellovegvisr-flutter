@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../services/auth_service.dart';
 import '../services/push_notification_service.dart';
+import '../services/invitation_service.dart';
 import '../main.dart' show firebaseInitialized;
 
 class LoginScreen extends StatefulWidget {
@@ -115,8 +116,16 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Login successful!')));
-      // Navigate to home
-      context.go('/');
+
+      // Check for pending brand invitation
+      final pendingInvite = InvitationService.consumePendingInvite();
+      if (pendingInvite != null) {
+        // Redirect to accept the pending invitation
+        context.go('/join/$pendingInvite');
+      } else {
+        // Navigate to home
+        context.go('/');
+      }
     } else {
       setState(() {
         _error = result['error'] ?? 'Invalid or expired code';

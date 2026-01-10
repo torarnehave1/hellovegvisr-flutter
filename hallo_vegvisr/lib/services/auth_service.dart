@@ -4,8 +4,7 @@ import 'dart:convert';
 import 'branding_service.dart';
 
 class AuthService {
-  static const String smsApiUrl =
-      'https://smsgway.vegvisr.org';
+  static const String smsApiUrl = 'https://smsgway.vegvisr.org';
 
   /// Send 6-digit SMS verification code to user's phone
   /// Phone number should be Norwegian format (8 digits or +47...)
@@ -15,7 +14,9 @@ class AuthService {
       return {
         'success': true,
         'phone': '+4712003400',
-        'expires_at': DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
+        'expires_at': DateTime.now()
+            .add(const Duration(minutes: 5))
+            .toIso8601String(),
         'message': 'Demo account - use code: 123456',
       };
     }
@@ -24,9 +25,7 @@ class AuthService {
       final response = await http.post(
         Uri.parse('$smsApiUrl/api/auth/phone/send-code'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone': phone,
-        }),
+        body: jsonEncode({'phone': phone}),
       );
 
       final data = jsonDecode(response.body);
@@ -46,10 +45,7 @@ class AuthService {
       }
     } catch (e) {
       print('Send OTP error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -74,10 +70,7 @@ class AuthService {
       final response = await http.post(
         Uri.parse('$smsApiUrl/api/auth/phone/verify-code'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'phone': phone,
-          'code': code,
-        }),
+        body: jsonEncode({'phone': phone, 'code': code}),
       );
 
       final data = jsonDecode(response.body);
@@ -92,17 +85,11 @@ class AuthService {
           'verified_at': data['verified_at'],
         };
       } else {
-        return {
-          'success': false,
-          'error': data['error'] ?? 'Invalid code',
-        };
+        return {'success': false, 'error': data['error'] ?? 'Invalid code'};
       }
     } catch (e) {
       print('Verify OTP error: $e');
-      return {
-        'success': false,
-        'error': 'Network error: $e',
-      };
+      return {'success': false, 'error': 'Network error: $e'};
     }
   }
 
@@ -110,7 +97,9 @@ class AuthService {
   Future<Map<String, dynamic>?> checkPhoneStatus(String phone) async {
     try {
       final response = await http.get(
-        Uri.parse('$smsApiUrl/api/auth/phone/status?phone=${Uri.encodeComponent(phone)}'),
+        Uri.parse(
+          '$smsApiUrl/api/auth/phone/status?phone=${Uri.encodeComponent(phone)}',
+        ),
       );
 
       if (response.statusCode == 200) {
@@ -270,7 +259,9 @@ class AuthService {
   Future<String?> getUserProfileImage(String userId) async {
     try {
       final response = await http.get(
-        Uri.parse('$smsApiUrl/api/auth/profile/image?user_id=${Uri.encodeComponent(userId)}'),
+        Uri.parse(
+          '$smsApiUrl/api/auth/profile/image?user_id=${Uri.encodeComponent(userId)}',
+        ),
       );
 
       if (response.statusCode == 200) {

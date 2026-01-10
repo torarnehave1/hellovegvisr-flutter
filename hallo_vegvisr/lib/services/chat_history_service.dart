@@ -27,20 +27,25 @@ class ChatHistoryService {
   }) async {
     try {
       final uri = Uri.parse('$baseUrl/sessions').replace(
-        queryParameters: {
-          if (graphId.trim().isNotEmpty) 'graphId': graphId,
-        },
+        queryParameters: {if (graphId.trim().isNotEmpty) 'graphId': graphId},
       );
 
       final response = await http.get(
         uri,
-        headers: _headers(userId: userId, userEmail: userEmail, userRole: userRole, jsonContent: false),
+        headers: _headers(
+          userId: userId,
+          userEmail: userEmail,
+          userRole: userRole,
+          jsonContent: false,
+        ),
       );
 
       if (!response.statusCode.toString().startsWith('2')) {
         return {
           'success': false,
-          'error': response.body.isNotEmpty ? response.body : 'Failed to load sessions (${response.statusCode})',
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'Failed to load sessions (${response.statusCode})',
         };
       }
 
@@ -69,28 +74,32 @@ class ChatHistoryService {
         'graphId': graphId,
         'provider': provider,
         if (metadata != null) 'metadata': metadata,
-        if (sessionId != null && sessionId.trim().isNotEmpty) 'sessionId': sessionId,
+        if (sessionId != null && sessionId.trim().isNotEmpty)
+          'sessionId': sessionId,
         if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
       };
 
       final response = await http.post(
         Uri.parse('$baseUrl/sessions'),
-        headers: _headers(userId: userId, userEmail: userEmail, userRole: userRole),
+        headers: _headers(
+          userId: userId,
+          userEmail: userEmail,
+          userRole: userRole,
+        ),
         body: jsonEncode(payload),
       );
 
       if (!response.statusCode.toString().startsWith('2')) {
         return {
           'success': false,
-          'error': response.body.isNotEmpty ? response.body : 'Failed to create session (${response.statusCode})',
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'Failed to create session (${response.statusCode})',
         };
       }
 
       final data = jsonDecode(response.body);
-      return {
-        'success': true,
-        'session': data['session'],
-      };
+      return {'success': true, 'session': data['session']};
     } catch (e) {
       return {'success': false, 'error': 'Network error: $e'};
     }
@@ -105,13 +114,20 @@ class ChatHistoryService {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl/sessions/$sessionId'),
-        headers: _headers(userId: userId, userEmail: userEmail, userRole: userRole, jsonContent: false),
+        headers: _headers(
+          userId: userId,
+          userEmail: userEmail,
+          userRole: userRole,
+          jsonContent: false,
+        ),
       );
 
       if (!response.statusCode.toString().startsWith('2')) {
         return {
           'success': false,
-          'error': response.body.isNotEmpty ? response.body : 'Failed to delete session (${response.statusCode})',
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'Failed to delete session (${response.statusCode})',
         };
       }
 
@@ -135,17 +151,26 @@ class ChatHistoryService {
         'limit': '$limit',
         if (decrypt) 'decrypt': '1',
       };
-      final uri = Uri.parse('$baseUrl/messages').replace(queryParameters: params);
+      final uri = Uri.parse(
+        '$baseUrl/messages',
+      ).replace(queryParameters: params);
 
       final response = await http.get(
         uri,
-        headers: _headers(userId: userId, userEmail: userEmail, userRole: userRole, jsonContent: false),
+        headers: _headers(
+          userId: userId,
+          userEmail: userEmail,
+          userRole: userRole,
+          jsonContent: false,
+        ),
       );
 
       if (!response.statusCode.toString().startsWith('2')) {
         return {
           'success': false,
-          'error': response.body.isNotEmpty ? response.body : 'Failed to load messages (${response.statusCode})',
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'Failed to load messages (${response.statusCode})',
         };
       }
 
@@ -173,27 +198,31 @@ class ChatHistoryService {
         'sessionId': sessionId,
         'role': role,
         'content': content,
-        if (provider != null && provider.trim().isNotEmpty) 'provider': provider,
+        if (provider != null && provider.trim().isNotEmpty)
+          'provider': provider,
       };
 
       final response = await http.post(
         Uri.parse('$baseUrl/messages'),
-        headers: _headers(userId: userId, userEmail: userEmail, userRole: userRole),
+        headers: _headers(
+          userId: userId,
+          userEmail: userEmail,
+          userRole: userRole,
+        ),
         body: jsonEncode(payload),
       );
 
       if (!response.statusCode.toString().startsWith('2')) {
         return {
           'success': false,
-          'error': response.body.isNotEmpty ? response.body : 'Failed to persist message (${response.statusCode})',
+          'error': response.body.isNotEmpty
+              ? response.body
+              : 'Failed to persist message (${response.statusCode})',
         };
       }
 
       final data = jsonDecode(response.body);
-      return {
-        'success': true,
-        'message': data['message'],
-      };
+      return {'success': true, 'message': data['message']};
     } catch (e) {
       return {'success': false, 'error': 'Network error: $e'};
     }

@@ -11,11 +11,7 @@ class GraphViewerScreen extends StatefulWidget {
   final String graphId;
   final String? title;
 
-  const GraphViewerScreen({
-    super.key,
-    required this.graphId,
-    this.title,
-  });
+  const GraphViewerScreen({super.key, required this.graphId, this.title});
 
   @override
   State<GraphViewerScreen> createState() => _GraphViewerScreenState();
@@ -72,7 +68,8 @@ class _GraphViewerScreenState extends State<GraphViewerScreen> {
           final first = nodes.first;
           if (first is Map) {
             final firstMap = Map<String, dynamic>.from(first);
-            content = (firstMap['info'] ?? firstMap['content'] ?? '').toString();
+            content = (firstMap['info'] ?? firstMap['content'] ?? '')
+                .toString();
           }
         }
       }
@@ -144,37 +141,41 @@ class _GraphViewerScreenState extends State<GraphViewerScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error.isNotEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
-                        const SizedBox(height: 12),
-                        Text(
-                          _error,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.red.shade700),
-                        ),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: _loadGraph,
-                          child: const Text('Retry'),
-                        ),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red.shade300,
                     ),
-                  ),
-                )
-              : Markdown(
-                  data: _markdown,
-                  selectable: true,
-                  builders: _markdownBuilders(context),
-                  onTapLink: (text, href, title) {
-                    // Intentionally do nothing here.
-                    // We override <a> via builders to prevent any in-app browser overlay.
-                  },
+                    const SizedBox(height: 12),
+                    Text(
+                      _error,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _loadGraph,
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ),
+              ),
+            )
+          : Markdown(
+              data: _markdown,
+              selectable: true,
+              builders: _markdownBuilders(context),
+              onTapLink: (text, href, title) {
+                // Intentionally do nothing here.
+                // We override <a> via builders to prevent any in-app browser overlay.
+              },
+            ),
     );
   }
 }
@@ -183,10 +184,7 @@ class _CopyLinkBuilder extends MarkdownElementBuilder {
   final Color linkColor;
   final void Function(String? href) onTapHref;
 
-  _CopyLinkBuilder({
-    required this.linkColor,
-    required this.onTapHref,
-  });
+  _CopyLinkBuilder({required this.linkColor, required this.onTapHref});
 
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {

@@ -79,7 +79,9 @@ class _MyAppState extends State<MyApp> {
       GlobalKey<ScaffoldMessengerState>();
 
   // Dynamic theme support
-  ThemeData _theme = BrandingService.generateTheme(BrandingConfig.defaultBranding());
+  ThemeData _theme = BrandingService.generateTheme(
+    BrandingConfig.defaultBranding(),
+  );
 
   /// Update theme from branding configuration
   void updateTheme(BrandingConfig branding) {

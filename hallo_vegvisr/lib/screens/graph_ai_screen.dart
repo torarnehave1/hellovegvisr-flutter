@@ -25,7 +25,6 @@ class GraphAiScreen extends StatefulWidget {
   State<GraphAiScreen> createState() => _GraphAiScreenState();
 }
 
-
 class _RemoteChatSession {
   final String id;
   final String title;
@@ -131,14 +130,15 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     };
   }
 
-  String _activeSessionStorageKey({required String userId, required String graphId}) {
+  String _activeSessionStorageKey({
+    required String userId,
+    required String graphId,
+  }) {
     return 'graph_ai_active_session:$userId:$graphId';
   }
 
   Map<String, dynamic> _buildSessionMetadata() {
-    return {
-      'graphTitle': _graphTitle ?? 'Untitled Graph',
-    };
+    return {'graphTitle': _graphTitle ?? 'Untitled Graph'};
   }
 
   String _formatSessionTimestamp(String isoString) {
@@ -146,7 +146,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     try {
       final dt = DateTime.parse(isoString).toLocal();
       final now = DateTime.now();
-      final sameDay = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+      final sameDay =
+          dt.year == now.year && dt.month == now.month && dt.day == now.day;
       final hh = dt.hour.toString().padLeft(2, '0');
       final mm = dt.minute.toString().padLeft(2, '0');
       if (sameDay) return '$hh:$mm';
@@ -187,7 +188,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
           if (item is Map<String, dynamic>) {
             sessions.add(_RemoteChatSession.fromJson(item));
           } else if (item is Map) {
-            sessions.add(_RemoteChatSession.fromJson(Map<String, dynamic>.from(item)));
+            sessions.add(
+              _RemoteChatSession.fromJson(Map<String, dynamic>.from(item)),
+            );
           }
         }
 
@@ -228,7 +231,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
           if (item is Map<String, dynamic>) {
             sessions.add(_RemoteChatSession.fromJson(item));
           } else if (item is Map) {
-            sessions.add(_RemoteChatSession.fromJson(Map<String, dynamic>.from(item)));
+            sessions.add(
+              _RemoteChatSession.fromJson(Map<String, dynamic>.from(item)),
+            );
           }
         }
 
@@ -237,7 +242,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
         });
       } else {
         setState(() {
-          _aiSessionsError = (result['error'] ?? 'Failed to load sessions').toString();
+          _aiSessionsError = (result['error'] ?? 'Failed to load sessions')
+              .toString();
         });
       }
     } finally {
@@ -319,7 +325,10 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     }
   }
 
-  Future<void> _persistChatMessageRemote({required String role, required String content}) async {
+  Future<void> _persistChatMessageRemote({
+    required String role,
+    required String content,
+  }) async {
     final sessionId = _activeAiSessionId;
     if (sessionId == null || sessionId.trim().isEmpty) return;
     final auth = await _historyAuth();
@@ -380,7 +389,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
       }
     } else {
       setState(() {
-        _aiSessionsError = (created['error'] ?? 'Failed to create session').toString();
+        _aiSessionsError = (created['error'] ?? 'Failed to create session')
+            .toString();
       });
     }
 
@@ -438,7 +448,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
       });
     } else {
       setState(() {
-        _aiSessionsError = (fetched['error'] ?? 'Failed to load chat history').toString();
+        _aiSessionsError = (fetched['error'] ?? 'Failed to load chat history')
+            .toString();
       });
     }
 
@@ -475,7 +486,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     if (!mounted) return;
     if (res['success'] != true) {
       setState(() {
-        _aiSessionsError = (res['error'] ?? 'Failed to rename session').toString();
+        _aiSessionsError = (res['error'] ?? 'Failed to rename session')
+            .toString();
       });
     }
 
@@ -507,7 +519,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     if (!mounted) return;
     if (res['success'] != true) {
       setState(() {
-        _aiSessionsError = (res['error'] ?? 'Failed to delete session').toString();
+        _aiSessionsError = (res['error'] ?? 'Failed to delete session')
+            .toString();
       });
     } else {
       if (_activeAiSessionId == sessionId) {
@@ -539,9 +552,7 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Enter a session name',
-            ),
+            decoration: const InputDecoration(hintText: 'Enter a session name'),
           ),
           actions: [
             TextButton(
@@ -604,7 +615,10 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
                     const Expanded(
                       child: Text(
                         'AI Sessions',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     TextButton.icon(
@@ -644,7 +658,11 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        leading: Icon(isActive ? Icons.check_circle : Icons.chat_bubble_outline),
+                        leading: Icon(
+                          isActive
+                              ? Icons.check_circle
+                              : Icons.chat_bubble_outline,
+                        ),
                         onTap: () async {
                           Navigator.pop(context);
                           await _selectAiSession(s.id);
@@ -791,8 +809,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
         content = content.substring(0, footerIndex);
       }
 
-      final loadedTitle = (graph['title'] ?? activeGraphTitle ?? 'Untitled graph')
-          .toString();
+      final loadedTitle =
+          (graph['title'] ?? activeGraphTitle ?? 'Untitled graph').toString();
       final loadedContent = content;
 
       setState(() {
@@ -1467,9 +1485,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
     final nextContent = _contentController.text.trim();
 
     if (nextTitle == _lastSavedTitle && nextContent == _lastSavedContent) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No changes to save')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No changes to save')));
       return;
     }
 
@@ -1513,7 +1531,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
       if (fetched['success'] == true) {
         final graph = fetched['graph'] as Map<String, dynamic>;
         String fetchedContent = (graph['content'] ?? '').toString();
-        final footerIndex = fetchedContent.lastIndexOf('\n\n---\n\n*Created by:');
+        final footerIndex = fetchedContent.lastIndexOf(
+          '\n\n---\n\n*Created by:',
+        );
         if (footerIndex > 0) {
           fetchedContent = fetchedContent.substring(0, footerIndex);
         }
@@ -1521,8 +1541,8 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
         final fetchedTitle = (graph['title'] ?? '').toString().trim();
         final fetchedTrimmedContent = fetchedContent.trim();
 
-        final matches = fetchedTitle == nextTitle &&
-            fetchedTrimmedContent == nextContent;
+        final matches =
+            fetchedTitle == nextTitle && fetchedTrimmedContent == nextContent;
 
         if (!matches) {
           setState(() {
@@ -1541,9 +1561,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
             _lastSavedContent = fetchedTrimmedContent;
           });
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Graph updated')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Graph updated')));
         }
       } else {
         setState(() {
@@ -1698,7 +1718,10 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
             children: [
               IconButton(
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                constraints: const BoxConstraints.tightFor(
+                  width: 40,
+                  height: 40,
+                ),
                 icon: _voiceSending
                     ? const SizedBox(
                         width: 18,
@@ -1736,7 +1759,10 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
               const SizedBox(width: 4),
               IconButton(
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                constraints: const BoxConstraints.tightFor(
+                  width: 40,
+                  height: 40,
+                ),
                 icon: _aiSending
                     ? const SizedBox(
                         width: 18,
@@ -1955,7 +1981,9 @@ class _GraphAiScreenState extends State<GraphAiScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error.isNotEmpty ? _error : 'Select a graph first.'),
+                      Text(
+                        _error.isNotEmpty ? _error : 'Select a graph first.',
+                      ),
                       const SizedBox(height: 12),
                       ElevatedButton(
                         onPressed: () => context.go('/my-graphs'),

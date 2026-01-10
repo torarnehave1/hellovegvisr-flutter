@@ -292,7 +292,10 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
                         icon: const Icon(Icons.visibility_outlined),
                         onPressed: graphId.isEmpty
                             ? null
-                            : () => context.push('/view-graph/$graphId', extra: title),
+                            : () => context.push(
+                                '/view-graph/$graphId',
+                                extra: title,
+                              ),
                         tooltip: 'View in app',
                       ),
                       IconButton(
@@ -305,7 +308,9 @@ class _MyGraphsScreenState extends State<MyGraphsScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.open_in_new),
-                        onPressed: graphId.isEmpty ? null : () => _openGraph(graphId),
+                        onPressed: graphId.isEmpty
+                            ? null
+                            : () => _openGraph(graphId),
                         tooltip: 'Open in browser (external)',
                       ),
                       IconButton(

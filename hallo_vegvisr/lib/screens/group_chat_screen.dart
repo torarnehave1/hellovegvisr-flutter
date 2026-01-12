@@ -105,7 +105,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (!mounted) return;
     final phase = SchedulerBinding.instance.schedulerPhase;
     final inBuild =
-        phase == SchedulerPhase.persistentCallbacks || phase == SchedulerPhase.midFrameMicrotasks;
+        phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.midFrameMicrotasks;
     if (inBuild) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -197,7 +198,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
-  String _formatDateShort(DateTime dt) => '${dt.day} ${_monthShort(dt.month)} ${dt.year}';
+  String _formatDateShort(DateTime dt) =>
+      '${dt.day} ${_monthShort(dt.month)} ${dt.year}';
 
   String _dayHeaderLabel(DateTime messageDayLocal, DateTime nowLocal) {
     final today = _startOfDay(nowLocal);
@@ -254,7 +256,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
-  String _guessContentTypeFromFileName(String fileName, {required bool isVideo}) {
+  String _guessContentTypeFromFileName(
+    String fileName, {
+    required bool isVideo,
+  }) {
     final lower = fileName.toLowerCase();
     if (isVideo) {
       if (lower.endsWith('.mov')) return 'video/quicktime';
@@ -317,9 +322,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         // Guard: very large camera videos can fail or be slow; enforce the backend limit.
         try {
           pickedLength = await picked.length();
-          const maxBytes = 200 * 1024 * 1024; // keep in sync with worker MAX_MEDIA_BYTES
+          const maxBytes =
+              200 * 1024 * 1024; // keep in sync with worker MAX_MEDIA_BYTES
           if (pickedLength > maxBytes) {
-            throw Exception('Video too large (${(pickedLength / (1024 * 1024)).toStringAsFixed(1)}MB). Max 200MB.');
+            throw Exception(
+              'Video too large (${(pickedLength / (1024 * 1024)).toStringAsFixed(1)}MB). Max 200MB.',
+            );
           }
         } catch (e) {
           throw e;
@@ -409,7 +417,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       }
 
       final fileName = picked.name;
-      final contentType = _guessContentTypeFromFileName(fileName, isVideo: isVideo);
+      final contentType = _guessContentTypeFromFileName(
+        fileName,
+        isVideo: isVideo,
+      );
 
       Uint8List? imageBytes;
       if (!isVideo) {
@@ -430,8 +441,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         userId: _userId!,
         phone: _phone!,
         email: _email,
-        stream: isVideo ? picked.openRead() : Stream<List<int>>.fromIterable([imageBytes!]),
-        length: isVideo ? (pickedLength ?? await picked.length()) : imageBytes!.length,
+        stream: isVideo
+            ? picked.openRead()
+            : Stream<List<int>>.fromIterable([imageBytes!]),
+        length: isVideo
+            ? (pickedLength ?? await picked.length())
+            : imageBytes!.length,
         fileName: fileName,
         contentType: contentType,
         onCancel: (cancel) {
@@ -467,7 +482,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       final objectKey = upload['objectKey']?.toString();
       final uploadedContentType = upload['contentType']?.toString();
       final size = upload['size'];
-      final mediaSize = size is int ? size : int.tryParse(size?.toString() ?? '');
+      final mediaSize = size is int
+          ? size
+          : int.tryParse(size?.toString() ?? '');
       if (mediaUrl.isEmpty) {
         throw Exception('Missing media URL from upload');
       }
@@ -502,7 +519,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
       setState(() {
         // De-dupe by media_url (similar to voice de-dupe by audio_url)
-        _messages.removeWhere((m) => (m['media_url']?.toString() ?? '') == mediaUrl && m['id'] != tempId);
+        _messages.removeWhere(
+          (m) =>
+              (m['media_url']?.toString() ?? '') == mediaUrl &&
+              m['id'] != tempId,
+        );
         final index = _messages.indexWhere((m) => m['id'] == tempId);
         if (index != -1) {
           _messages[index] = message;
@@ -523,9 +544,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         _messages.removeWhere((m) => (m['id'] is int) && (m['id'] as int) < 0);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send media: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to send media: $e')));
       }
     } finally {
       if (tempMessageId != null) {
@@ -665,7 +686,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (!_hasMoreHistory) return;
 
     // If we don't have a cursor, we can't load older.
-    final before = _nextBefore ?? (_messages.isNotEmpty ? (_messages.first['id'] as int?) : null);
+    final before =
+        _nextBefore ??
+        (_messages.isNotEmpty ? (_messages.first['id'] as int?) : null);
     if (before == null || before <= 0) {
       setState(() => _hasMoreHistory = false);
       return;
@@ -673,7 +696,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     setState(() => _loadingMore = true);
 
-    final position = _scrollController.hasClients ? _scrollController.position : null;
+    final position = _scrollController.hasClients
+        ? _scrollController.position
+        : null;
     final previousPixels = position?.pixels;
     final previousMax = position?.maxScrollExtent;
 
@@ -716,7 +741,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       });
 
       // Keep the viewport stable when we prepend items.
-      if (previousPixels != null && previousMax != null && _scrollController.hasClients) {
+      if (previousPixels != null &&
+          previousMax != null &&
+          _scrollController.hasClients) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_scrollController.hasClients) return;
           final newMax = _scrollController.position.maxScrollExtent;
@@ -1168,7 +1195,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (!force) {
       // Avoid yanking the user to the bottom when they're reading history.
       const nearBottomPx = 120.0;
-      final distanceFromBottom = (position.maxScrollExtent - position.pixels).abs();
+      final distanceFromBottom = (position.maxScrollExtent - position.pixels)
+          .abs();
       if (distanceFromBottom > nearBottomPx) return;
     }
     _scrollController.animateTo(
@@ -1252,10 +1280,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 backgroundColor: Colors.white.withValues(alpha: 0.2),
                 backgroundImage: _groupImageUrl != null
                     ? NetworkImage(
-                        _cacheBustedImageUrl(
-                          _groupImageUrl,
-                          _groupUpdatedAt,
-                        )!,
+                        _cacheBustedImageUrl(_groupImageUrl, _groupUpdatedAt)!,
                       )
                     : null,
                 child: _groupImageUrl == null
@@ -1302,7 +1327,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       NotificationListener<ScrollNotification>(
                         onNotification: (notification) {
                           // Only act on an actual user drag to avoid runaway behavior.
-                          final isUserDrag = (notification is ScrollUpdateNotification &&
+                          final isUserDrag =
+                              (notification is ScrollUpdateNotification &&
                                   notification.dragDetails != null) ||
                               (notification is OverscrollNotification &&
                                   notification.dragDetails != null);
@@ -1312,7 +1338,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           if (!_loading && !_loadingMore && _hasMoreHistory) {
                             const thresholdPx = 220.0;
                             final metrics = notification.metrics;
-                            final nearTopOfHistory = metrics.pixels <= thresholdPx;
+                            final nearTopOfHistory =
+                                metrics.pixels <= thresholdPx;
                             if (nearTopOfHistory) {
                               _loadOlderMessages();
                             }
@@ -1323,8 +1350,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           if (nowMs - _lastScrollOverlayUpdateMs >= 80) {
                             _lastScrollOverlayUpdateMs = nowMs;
 
-                            final itemCount = _messages.length + (_hasMoreHistory ? 1 : 0);
-                            final maxExtent = notification.metrics.maxScrollExtent;
+                            final itemCount =
+                                _messages.length + (_hasMoreHistory ? 1 : 0);
+                            final maxExtent =
+                                notification.metrics.maxScrollExtent;
                             final avgExtent = (itemCount > 1 && maxExtent > 0)
                                 ? (maxExtent / (itemCount - 1))
                                 : null;
@@ -1332,7 +1361,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             int? estimatedIndex;
                             if (avgExtent != null && avgExtent > 0) {
                               estimatedIndex =
-                                  (notification.metrics.pixels / avgExtent).floor().clamp(0, itemCount - 1);
+                                  (notification.metrics.pixels / avgExtent)
+                                      .floor()
+                                      .clamp(0, itemCount - 1);
                               if (_hasMoreHistory && estimatedIndex == 0) {
                                 estimatedIndex = 1;
                               }
@@ -1342,12 +1373,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               final messageIndex = _hasMoreHistory
                                   ? (estimatedIndex - 1)
                                   : estimatedIndex;
-                              if (messageIndex >= 0 && messageIndex < _messages.length) {
+                              if (messageIndex >= 0 &&
+                                  messageIndex < _messages.length) {
                                 final message = _messages[messageIndex];
-                                final createdAt = _messageCreatedAtLocal(message);
+                                final createdAt = _messageCreatedAtLocal(
+                                  message,
+                                );
                                 if (createdAt != null) {
-                                  final label = _dayHeaderLabel(createdAt, nowLocal);
-                                  if (_scrollDayOverlayLabel != label || !_showScrollDayOverlay) {
+                                  final label = _dayHeaderLabel(
+                                    createdAt,
+                                    nowLocal,
+                                  );
+                                  if (_scrollDayOverlayLabel != label ||
+                                      !_showScrollDayOverlay) {
                                     _safeSetState(() {
                                       _scrollDayOverlayLabel = label;
                                       _showScrollDayOverlay = true;
@@ -1356,7 +1394,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                   _scrollDayOverlayTimer?.cancel();
                                   _scrollDayOverlayTimer = Timer(
                                     const Duration(milliseconds: 700),
-                                    () => _safeSetState(() => _showScrollDayOverlay = false),
+                                    () => _safeSetState(
+                                      () => _showScrollDayOverlay = false,
+                                    ),
                                   );
                                 }
                               }
@@ -1369,27 +1409,38 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           controller: _scrollController,
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(12),
-                          itemCount: _messages.length + (_hasMoreHistory ? 1 : 0),
+                          itemCount:
+                              _messages.length + (_hasMoreHistory ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (_hasMoreHistory && index == 0) {
                               // History loader row (top).
                               return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
                                 child: Center(
                                   child: _loadingMore
                                       ? const SizedBox(
                                           width: 18,
                                           height: 18,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
                                         )
                                       : GestureDetector(
                                           behavior: HitTestBehavior.opaque,
                                           onTap: _loadOlderMessages,
                                           child: const Padding(
-                                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 6,
+                                            ),
                                             child: Text(
                                               'Tap here to load earlier messages',
-                                              style: TextStyle(color: Colors.grey, fontSize: 12),
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 12,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -1397,23 +1448,32 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               );
                             }
 
-                            final messageIndex = _hasMoreHistory ? index - 1 : index;
+                            final messageIndex = _hasMoreHistory
+                                ? index - 1
+                                : index;
                             final message = _messages[messageIndex];
                             final createdAt = _messageCreatedAtLocal(message);
                             DateTime? prevCreatedAt;
                             if (messageIndex > 0) {
-                              prevCreatedAt = _messageCreatedAtLocal(_messages[messageIndex - 1]);
+                              prevCreatedAt = _messageCreatedAtLocal(
+                                _messages[messageIndex - 1],
+                              );
                             }
                             final showDayHeader =
                                 createdAt != null &&
-                                (messageIndex == 0 || prevCreatedAt == null || !_isSameDay(createdAt, prevCreatedAt));
-                            final dayLabel = createdAt != null ? _dayHeaderLabel(createdAt, nowLocal) : null;
+                                (messageIndex == 0 ||
+                                    prevCreatedAt == null ||
+                                    !_isSameDay(createdAt, prevCreatedAt));
+                            final dayLabel = createdAt != null
+                                ? _dayHeaderLabel(createdAt, nowLocal)
+                                : null;
 
                             final isMine = message['user_id'] == _userId;
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                if (showDayHeader && dayLabel != null) _buildDaySeparator(dayLabel),
+                                if (showDayHeader && dayLabel != null)
+                                  _buildDaySeparator(dayLabel),
                                 _buildMessageBubble(message, isMine),
                               ],
                             );
@@ -1426,12 +1486,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         right: 0,
                         child: IgnorePointer(
                           child: AnimatedOpacity(
-                            opacity: _showScrollDayOverlay && (_scrollDayOverlayLabel?.isNotEmpty ?? false) ? 1 : 0,
+                            opacity:
+                                _showScrollDayOverlay &&
+                                    (_scrollDayOverlayLabel?.isNotEmpty ??
+                                        false)
+                                ? 1
+                                : 0,
                             duration: const Duration(milliseconds: 120),
                             child: Center(
                               child: _scrollDayOverlayLabel == null
                                   ? const SizedBox.shrink()
-                                  : _buildDayOverlayPill(_scrollDayOverlayLabel!),
+                                  : _buildDayOverlayPill(
+                                      _scrollDayOverlayLabel!,
+                                    ),
                             ),
                           ),
                         ),
@@ -1488,22 +1555,25 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
 
     final isVoice =
-      (messageType == 'voice' || (message['audio_url']?.toString() ?? '').isNotEmpty);
+        (messageType == 'voice' ||
+        (message['audio_url']?.toString() ?? '').isNotEmpty);
     final isMedia =
-      (messageType == 'image' || messageType == 'video' || (message['media_url']?.toString() ?? '').isNotEmpty);
+        (messageType == 'image' ||
+        messageType == 'video' ||
+        (message['media_url']?.toString() ?? '').isNotEmpty);
 
     final messageContent = (_lightweightChatView && (isVoice || isMedia))
-      ? _buildLightweightAttachmentContent(message, isMine)
-      : (isVoice
-        ? _buildVoiceContent(message, isMine)
-        : (isMedia
-          ? _buildMediaContent(message, isMine)
-          : RichText(
-            text: TextSpan(
-              style: baseStyle,
-              children: _buildMessageSpans(text, linkStyle),
-            ),
-            )));
+        ? _buildLightweightAttachmentContent(message, isMine)
+        : (isVoice
+              ? _buildVoiceContent(message, isMine)
+              : (isMedia
+                    ? _buildMediaContent(message, isMine)
+                    : RichText(
+                        text: TextSpan(
+                          style: baseStyle,
+                          children: _buildMessageSpans(text, linkStyle),
+                        ),
+                      )));
 
     final messageBubble = Container(
       constraints: BoxConstraints(
@@ -1560,9 +1630,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
-  Widget _buildLightweightAttachmentContent(Map<String, dynamic> message, bool isMine) {
+  Widget _buildLightweightAttachmentContent(
+    Map<String, dynamic> message,
+    bool isMine,
+  ) {
     final messageType =
-        message['message_type']?.toString() ?? message['type']?.toString() ?? 'text';
+        message['message_type']?.toString() ??
+        message['type']?.toString() ??
+        'text';
     final audioUrl = message['audio_url']?.toString() ?? '';
     final mediaUrl = message['media_url']?.toString() ?? '';
     final contentType = message['media_content_type']?.toString();
@@ -1574,14 +1649,18 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     final isVoice = messageType == 'voice' || audioUrl.isNotEmpty;
     final isVideo =
-        messageType == 'video' || ((contentType ?? '').toLowerCase().startsWith('video/'));
+        messageType == 'video' ||
+        ((contentType ?? '').toLowerCase().startsWith('video/'));
     final isImage = messageType == 'image' || (!isVideo && mediaUrl.isNotEmpty);
 
     void openMediaViewer() {
       if (mediaUrl.isEmpty) return;
       context.push(
         '/media-viewer',
-        extra: ChatMediaViewerArgs(mediaUrl: mediaUrl, contentType: contentType),
+        extra: ChatMediaViewerArgs(
+          mediaUrl: mediaUrl,
+          contentType: contentType,
+        ),
       );
     }
 
@@ -1814,7 +1893,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Widget _buildMediaContent(Map<String, dynamic> message, bool isMine) {
     final messageType =
-        message['message_type']?.toString() ?? message['type']?.toString() ?? 'text';
+        message['message_type']?.toString() ??
+        message['type']?.toString() ??
+        'text';
     final mediaUrl = message['media_url']?.toString() ?? '';
     final contentType = message['media_content_type']?.toString();
     final videoThumbUrl = message['video_thumbnail_url']?.toString() ?? '';
@@ -1823,15 +1904,25 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final progressRaw = message['upload_progress'];
     final uploadProgress = progressRaw is num ? progressRaw.toDouble() : null;
     final durationRaw = message['video_duration_ms'];
-    final videoDurationMs = durationRaw is int ? durationRaw : int.tryParse(durationRaw?.toString() ?? '');
-    final uploading = (message['uploading'] == true) || (mediaUrl.isEmpty && (message['id'] is int) && (message['id'] as int) < 0);
+    final videoDurationMs = durationRaw is int
+        ? durationRaw
+        : int.tryParse(durationRaw?.toString() ?? '');
+    final uploading =
+        (message['uploading'] == true) ||
+        (mediaUrl.isEmpty &&
+            (message['id'] is int) &&
+            (message['id'] as int) < 0);
 
-    final isVideo = messageType == 'video' || (contentType ?? '').toLowerCase().startsWith('video/');
+    final isVideo =
+        messageType == 'video' ||
+        (contentType ?? '').toLowerCase().startsWith('video/');
     final textColor = isMine ? Colors.white : Colors.black87;
     final subTextColor = isMine ? Colors.white70 : Colors.black54;
     final idRaw = message['id'];
     final tempId = idRaw is int ? idRaw : null;
-    final cancelUpload = (tempId != null) ? _cancelUploadByTempId[tempId] : null;
+    final cancelUpload = (tempId != null)
+        ? _cancelUploadByTempId[tempId]
+        : null;
 
     if (uploading) {
       Widget? preview;
@@ -1840,7 +1931,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         if (localThumbBytes != null && localThumbBytes.isNotEmpty) {
           preview = Image.memory(localThumbBytes, fit: BoxFit.cover);
         } else if (videoThumbUrl.isNotEmpty) {
-          preview = CachedNetworkImage(imageUrl: videoThumbUrl, fit: BoxFit.cover);
+          preview = CachedNetworkImage(
+            imageUrl: videoThumbUrl,
+            fit: BoxFit.cover,
+          );
         }
       } else {
         if (localImageBytes != null && localImageBytes.isNotEmpty) {
@@ -1848,7 +1942,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         }
       }
 
-      final pct = (uploadProgress != null) ? (uploadProgress.clamp(0.0, 1.0) * 100).round() : null;
+      final pct = (uploadProgress != null)
+          ? (uploadProgress.clamp(0.0, 1.0) * 100).round()
+          : null;
 
       if (preview == null) {
         return Row(
@@ -1909,7 +2005,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         color: Colors.black.withOpacity(0.55),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close, color: Colors.white, size: 18),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                     ),
                   ),
                 ),
@@ -1918,19 +2018,30 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   bottom: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.55),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'Uploading $pct%',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
               if (isVideo)
-                Icon(Icons.play_circle_fill, color: Colors.white.withOpacity(0.85), size: 54),
+                Icon(
+                  Icons.play_circle_fill,
+                  color: Colors.white.withOpacity(0.85),
+                  size: 54,
+                ),
             ],
           ),
         ),
@@ -1944,7 +2055,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     void openMediaViewer() {
       context.push(
         '/media-viewer',
-        extra: ChatMediaViewerArgs(mediaUrl: mediaUrl, contentType: contentType),
+        extra: ChatMediaViewerArgs(
+          mediaUrl: mediaUrl,
+          contentType: contentType,
+        ),
       );
     }
 
@@ -1979,30 +2093,46 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         height: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(subTextColor),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            subTextColor,
+                          ),
                         ),
                       ),
                     ),
                     errorWidget: (context, imageUrl, error) => Container(
                       color: isMine ? Colors.white12 : Colors.black12,
                       padding: const EdgeInsets.all(12),
-                      child: Text('Failed to load video preview', style: TextStyle(color: subTextColor)),
+                      child: Text(
+                        'Failed to load video preview',
+                        style: TextStyle(color: subTextColor),
+                      ),
                     ),
                   ),
-                  Icon(Icons.play_circle_fill, color: Colors.white.withOpacity(0.92), size: 54),
+                  Icon(
+                    Icons.play_circle_fill,
+                    color: Colors.white.withOpacity(0.92),
+                    size: 54,
+                  ),
                   if (videoDurationMs != null)
                     Positioned(
                       right: 8,
                       bottom: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.55),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           formatDuration(videoDurationMs),
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -2020,7 +2150,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           children: [
             Icon(Icons.play_circle_fill, color: textColor, size: 28),
             const SizedBox(width: 8),
-            Text('Video', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+            Text(
+              'Video',
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       );
@@ -2050,7 +2183,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             errorWidget: (context, imageUrl, error) => Container(
               color: isMine ? Colors.white12 : Colors.black12,
               padding: const EdgeInsets.all(12),
-              child: Text('Failed to load photo', style: TextStyle(color: subTextColor)),
+              child: Text(
+                'Failed to load photo',
+                style: TextStyle(color: subTextColor),
+              ),
             ),
           ),
         ),
@@ -2125,126 +2261,126 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
           child: Row(
             children: [
-            const Icon(Icons.emoji_emotions_outlined, color: Colors.grey),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _pendingVoicePath == null
-                  ? TextField(
-                      controller: _messageController,
-                      decoration: const InputDecoration(
-                        hintText: 'Message',
-                        border: InputBorder.none,
+              const Icon(Icons.emoji_emotions_outlined, color: Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _pendingVoicePath == null
+                    ? TextField(
+                        controller: _messageController,
+                        decoration: const InputDecoration(
+                          hintText: 'Message',
+                          border: InputBorder.none,
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      )
+                    : Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              _isDraftPlaying
+                                  ? Icons.pause_circle
+                                  : Icons.play_circle,
+                              color: Colors.grey,
+                            ),
+                            onPressed: _toggleDraftPlayback,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.mic,
+                            color: Colors.redAccent,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _pendingVoiceDurationMs == null
+                                  ? 'Voice message ready'
+                                  : 'Voice message · ${_formatDuration(Duration(milliseconds: _pendingVoiceDurationMs!))}',
+                              style: const TextStyle(color: Colors.black87),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.grey,
+                            ),
+                            onPressed: _discardPendingVoice,
+                          ),
+                        ],
                       ),
-                      onSubmitted: (_) => _sendMessage(),
-                    )
-                  : Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            _isDraftPlaying
-                                ? Icons.pause_circle
-                                : Icons.play_circle,
-                            color: Colors.grey,
-                          ),
-                          onPressed: _toggleDraftPlayback,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.mic,
-                          color: Colors.redAccent,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _pendingVoiceDurationMs == null
-                                ? 'Voice message ready'
-                                : 'Voice message · ${_formatDuration(Duration(milliseconds: _pendingVoiceDurationMs!))}',
-                            style: const TextStyle(color: Colors.black87),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.grey,
-                          ),
-                          onPressed: _discardPendingVoice,
-                        ),
-                      ],
-                    ),
-            ),
-            if (_sendingVoice)
-              const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              IconButton(
-                icon: Icon(
-                  _recording ? Icons.stop_circle : Icons.mic,
-                  color: _recording ? Colors.redAccent : Colors.grey,
+              ),
+              if (_sendingVoice)
+                const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                IconButton(
+                  icon: Icon(
+                    _recording ? Icons.stop_circle : Icons.mic,
+                    color: _recording ? Colors.redAccent : Colors.grey,
+                  ),
+                  onPressed: _toggleVoiceRecording,
                 ),
-                onPressed: _toggleVoiceRecording,
-              ),
-            if (_sendingMedia)
-              const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
+              if (_sendingMedia)
+                const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.attach_file, color: Colors.grey),
+                  onPressed: _pendingVoicePath != null
+                      ? null
+                      : () {
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (context) {
+                              return SafeArea(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ListTile(
+                                      leading: const Icon(Icons.photo),
+                                      title: const Text('Photo'),
+                                      onTap: () {
+                                        Navigator.of(context).pop();
+                                        _pickAndSendMedia(isVideo: false);
+                                      },
+                                    ),
+                                    ListTile(
+                                      leading: const Icon(Icons.videocam),
+                                      title: const Text('Video'),
+                                      onTap: () {
+                                        Navigator.of(context).pop();
+                                        _pickAndSendMedia(isVideo: true);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                ),
               IconButton(
-                icon: const Icon(Icons.attach_file, color: Colors.grey),
-                onPressed: _pendingVoicePath != null
-                    ? null
-                    : () {
-                        showModalBottomSheet(
-                          context: context,
-                          builder: (context) {
-                            return SafeArea(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.photo),
-                                    title: const Text('Photo'),
-                                    onTap: () {
-                                      Navigator.of(context).pop();
-                                      _pickAndSendMedia(isVideo: false);
-                                    },
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.videocam),
-                                    title: const Text('Video'),
-                                    onTap: () {
-                                      Navigator.of(context).pop();
-                                      _pickAndSendMedia(isVideo: true);
-                                    },
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                      },
+                icon: const Icon(Icons.send, color: Color(0xFF4f6d7a)),
+                onPressed: () {
+                  if (_pendingVoicePath != null) {
+                    _sendVoiceMessageFromPath(
+                      _pendingVoicePath!,
+                      durationMs: _pendingVoiceDurationMs,
+                    );
+                  } else {
+                    _sendMessage();
+                  }
+                },
               ),
-            IconButton(
-              icon: const Icon(Icons.send, color: Color(0xFF4f6d7a)),
-              onPressed: () {
-                if (_pendingVoicePath != null) {
-                  _sendVoiceMessageFromPath(
-                    _pendingVoicePath!,
-                    durationMs: _pendingVoiceDurationMs,
-                  );
-                } else {
-                  _sendMessage();
-                }
-              },
-            ),
             ],
           ),
         ),

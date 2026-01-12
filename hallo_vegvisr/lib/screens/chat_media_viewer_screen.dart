@@ -13,7 +13,10 @@ class ChatMediaViewerArgs {
     if (ct.startsWith('video/')) return true;
     // Fallback: treat common video extensions as video.
     final lower = mediaUrl.toLowerCase();
-    return lower.endsWith('.mp4') || lower.contains('.mp4?') || lower.endsWith('.mov') || lower.contains('.mov?');
+    return lower.endsWith('.mp4') ||
+        lower.contains('.mp4?') ||
+        lower.endsWith('.mov') ||
+        lower.contains('.mov?');
   }
 }
 
@@ -34,7 +37,9 @@ class _ChatMediaViewerScreenState extends State<ChatMediaViewerScreen> {
   void initState() {
     super.initState();
     if (widget.args.isVideo) {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(widget.args.mediaUrl));
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.args.mediaUrl),
+      );
       _controller = controller;
       _initFuture = controller.initialize().then((_) {
         if (!mounted) return;
@@ -79,7 +84,10 @@ class _ChatMediaViewerScreenState extends State<ChatMediaViewerScreen> {
           ),
           errorWidget: (context, imageUrl, error) => const Padding(
             padding: EdgeInsets.all(16),
-            child: Text('Failed to load image', style: TextStyle(color: Colors.white70)),
+            child: Text(
+              'Failed to load image',
+              style: TextStyle(color: Colors.white70),
+            ),
           ),
         ),
       ),
@@ -91,7 +99,10 @@ class _ChatMediaViewerScreenState extends State<ChatMediaViewerScreen> {
     final initFuture = _initFuture;
     if (controller == null || initFuture == null) {
       return const Center(
-        child: Text('Missing video controller', style: TextStyle(color: Colors.white70)),
+        child: Text(
+          'Missing video controller',
+          style: TextStyle(color: Colors.white70),
+        ),
       );
     }
 
@@ -124,7 +135,10 @@ class _ChatMediaViewerScreenState extends State<ChatMediaViewerScreen> {
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 child: Column(
                   children: [
                     VideoProgressIndicator(
@@ -143,7 +157,11 @@ class _ChatMediaViewerScreenState extends State<ChatMediaViewerScreen> {
                         IconButton(
                           iconSize: 40,
                           color: Colors.white,
-                          icon: Icon(controller.value.isPlaying ? Icons.pause_circle : Icons.play_circle),
+                          icon: Icon(
+                            controller.value.isPlaying
+                                ? Icons.pause_circle
+                                : Icons.play_circle,
+                          ),
                           onPressed: () {
                             setState(() {
                               if (controller.value.isPlaying) {

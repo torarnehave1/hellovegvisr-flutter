@@ -105,9 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Show loading
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Creating invite link...')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Creating invite link...')));
 
     // Create invitation via API
     final result = await InvitationService.createInvitation(
@@ -124,7 +124,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // Share the invite link
       await SharePlus.instance.share(
         ShareParams(
-          text: 'Join me on ${_branding.siteTitle ?? _branding.domain}!\n\n$inviteUrl',
+          text:
+              'Join me on ${_branding.siteTitle ?? _branding.domain}!\n\n$inviteUrl',
           subject: 'Invitation to ${_branding.siteTitle ?? _branding.domain}',
         ),
       );
@@ -217,10 +218,17 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: _branding.hasCustomBranding ? Colors.white : const Color(0xFF0F172A),
+                color: _branding.hasCustomBranding
+                    ? Colors.white
+                    : const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: _branding.hasCustomBranding
-                    ? [BoxShadow(color: Colors.grey.withValues(alpha: 0.3), blurRadius: 8)]
+                    ? [
+                        BoxShadow(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                        ),
+                      ]
                     : null,
               ),
               child: _buildLogo(),

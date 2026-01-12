@@ -16,7 +16,8 @@ class MessagesPage {
 }
 
 class GroupChatService {
-  static const String baseUrl = 'https://group-chat-worker.torarnehave.workers.dev';
+  static const String baseUrl =
+      'https://group-chat-worker.torarnehave.workers.dev';
 
   // Best-practice paging response for cursor-based history loads.
   // Existing call sites can continue using `fetchMessages()`.
@@ -81,9 +82,12 @@ class GroupChatService {
       '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
     );
 
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 15);
     try {
-      final request = await client.postUrl(uri).timeout(const Duration(seconds: 15));
+      final request = await client
+          .postUrl(uri)
+          .timeout(const Duration(seconds: 15));
       request.headers.set(HttpHeaders.contentTypeHeader, contentType);
       request.headers.set('X-File-Name', fileName);
       request.contentLength = length;
@@ -112,7 +116,9 @@ class GroupChatService {
         onProgress?.call(sent, length);
       }
       onProgress?.call(length, length);
-      final response = await request.close().timeout(const Duration(minutes: 15));
+      final response = await request.close().timeout(
+        const Duration(minutes: 15),
+      );
 
       final body = await utf8.decoder
           .bind(response)
@@ -122,12 +128,22 @@ class GroupChatService {
       final data = _tryDecodeJson(body);
       if (response.statusCode != 200) {
         if (data != null && data['error'] != null) {
-          throw Exception('Upload failed (HTTP ${response.statusCode}): ${data['error']}');
+          throw Exception(
+            'Upload failed (HTTP ${response.statusCode}): ${data['error']}',
+          );
         }
-        _throwHttpFailure(action: 'Upload', statusCode: response.statusCode, body: body);
+        _throwHttpFailure(
+          action: 'Upload',
+          statusCode: response.statusCode,
+          body: body,
+        );
       }
       if (data == null) {
-        _throwHttpFailure(action: 'Upload', statusCode: response.statusCode, body: body);
+        _throwHttpFailure(
+          action: 'Upload',
+          statusCode: response.statusCode,
+          body: body,
+        );
       }
       if (data['success'] != true) {
         throw Exception(data['error'] ?? 'Failed to upload media');
@@ -177,10 +193,7 @@ class GroupChatService {
 
     final response = await http.post(
       uri,
-      headers: {
-        'Content-Type': contentType,
-        'X-File-Name': fileName,
-      },
+      headers: {'Content-Type': contentType, 'X-File-Name': fileName},
       body: bytes,
     );
 
@@ -188,9 +201,15 @@ class GroupChatService {
     final data = _tryDecodeJson(body);
     if (response.statusCode != 200) {
       if (data != null && data['error'] != null) {
-        throw Exception('Upload failed (HTTP ${response.statusCode}): ${data['error']}');
+        throw Exception(
+          'Upload failed (HTTP ${response.statusCode}): ${data['error']}',
+        );
       }
-      _throwHttpFailure(action: 'Upload', statusCode: response.statusCode, body: body);
+      _throwHttpFailure(
+        action: 'Upload',
+        statusCode: response.statusCode,
+        body: body,
+      );
     }
     if (data == null || data['success'] != true) {
       throw Exception((data ?? const {})['error'] ?? 'Failed to upload media');
@@ -226,7 +245,9 @@ class GroupChatService {
         if (mediaContentType != null && mediaContentType.isNotEmpty)
           'media_content_type': mediaContentType,
         if (mediaSize != null) 'media_size': mediaSize,
-        if (mediaType == 'video' && videoThumbnailUrl != null && videoThumbnailUrl.isNotEmpty)
+        if (mediaType == 'video' &&
+            videoThumbnailUrl != null &&
+            videoThumbnailUrl.isNotEmpty)
           'video_thumbnail_url': videoThumbnailUrl,
         if (mediaType == 'video' && videoDurationMs != null)
           'video_duration_ms': videoDurationMs,
@@ -238,12 +259,20 @@ class GroupChatService {
     final data = _tryDecodeJson(bodyJson);
     if (response.statusCode != 201) {
       if (data != null && data['error'] != null) {
-        throw Exception('Send failed (HTTP ${response.statusCode}): ${data['error']}');
+        throw Exception(
+          'Send failed (HTTP ${response.statusCode}): ${data['error']}',
+        );
       }
-      _throwHttpFailure(action: 'Send', statusCode: response.statusCode, body: bodyJson);
+      _throwHttpFailure(
+        action: 'Send',
+        statusCode: response.statusCode,
+        body: bodyJson,
+      );
     }
     if (data == null || data['success'] != true) {
-      throw Exception((data ?? const {})['error'] ?? 'Failed to send media message');
+      throw Exception(
+        (data ?? const {})['error'] ?? 'Failed to send media message',
+      );
     }
     return Map<String, dynamic>.from(data['message']);
   }
@@ -341,7 +370,9 @@ class GroupChatService {
 
     final response = await http.get(uri);
     final decoded = _tryDecodeJson(response.body);
-    if (response.statusCode != 200 || decoded == null || decoded['success'] != true) {
+    if (response.statusCode != 200 ||
+        decoded == null ||
+        decoded['success'] != true) {
       _throwHttpFailure(
         action: 'Load messages',
         statusCode: response.statusCode,
@@ -351,15 +382,21 @@ class GroupChatService {
 
     final messages = _parseMessages(decoded['messages']);
     final pagingRaw = decoded['paging'];
-    final paging = pagingRaw is Map ? Map<String, dynamic>.from(pagingRaw) : null;
+    final paging = pagingRaw is Map
+        ? Map<String, dynamic>.from(pagingRaw)
+        : null;
     final hasMore = paging != null
-      ? _tryParseBool(paging['has_more'])
-      : (messages.length == clampedLimit);
+        ? _tryParseBool(paging['has_more'])
+        : (messages.length == clampedLimit);
     final nextBefore = paging != null
-      ? _tryParseInt(paging['next_before'])
-      : (messages.isNotEmpty ? (messages.first['id'] as int?) : null);
+        ? _tryParseInt(paging['next_before'])
+        : (messages.isNotEmpty ? (messages.first['id'] as int?) : null);
 
-    return MessagesPage(messages: messages, hasMore: hasMore, nextBefore: nextBefore);
+    return MessagesPage(
+      messages: messages,
+      hasMore: hasMore,
+      nextBefore: nextBefore,
+    );
   }
 
   Future<Map<String, dynamic>> sendMessage({
@@ -410,7 +447,8 @@ class GroupChatService {
         if (audioDurationMs != null) 'audio_duration_ms': audioDurationMs,
         if (transcriptText != null) 'transcript_text': transcriptText,
         if (transcriptLang != null) 'transcript_lang': transcriptLang,
-        if (transcriptionStatus != null) 'transcription_status': transcriptionStatus,
+        if (transcriptionStatus != null)
+          'transcription_status': transcriptionStatus,
       }),
     );
 
@@ -440,7 +478,8 @@ class GroupChatService {
         if (email != null && email.isNotEmpty) 'email': email,
         if (transcriptText != null) 'transcript_text': transcriptText,
         if (transcriptLang != null) 'transcript_lang': transcriptLang,
-        if (transcriptionStatus != null) 'transcription_status': transcriptionStatus,
+        if (transcriptionStatus != null)
+          'transcription_status': transcriptionStatus,
       }),
     );
 
@@ -520,7 +559,11 @@ class GroupChatService {
     String? email,
   }) async {
     // Fetch all groups and find the one we need
-    final groups = await fetchGroups(userId: userId, phone: phone, email: email);
+    final groups = await fetchGroups(
+      userId: userId,
+      phone: phone,
+      email: email,
+    );
     for (final g in groups) {
       if (g['id'] == groupId) {
         return g;

@@ -30,8 +30,10 @@ class MenuItem {
 class BrandingConfig {
   final String? domain;
   final String? logoUrl;
-  final String? mobileAppLogo; // Special logo for mobile app with "Powered by" branding
-  final String? mobileAppTitle; // Custom title to replace the default app title in mobile app
+  final String?
+  mobileAppLogo; // Special logo for mobile app with "Powered by" branding
+  final String?
+  mobileAppTitle; // Custom title to replace the default app title in mobile app
   final String? siteTitle;
   final String? slogan; // Brand tagline/slogan
   final Color primaryColor;
@@ -88,8 +90,8 @@ class BrandingConfig {
   /// Returns mobileAppTitle if set, otherwise falls back to "Hallo Vegvisr"
   String get effectiveMobileAppTitle =>
       (mobileAppTitle != null && mobileAppTitle!.isNotEmpty)
-          ? mobileAppTitle!
-          : 'Hallo Vegvisr';
+      ? mobileAppTitle!
+      : 'Hallo Vegvisr';
 
   /// Creates branding configuration from API response
   factory BrandingConfig.fromJson(Map<String, dynamic> json) {
@@ -140,15 +142,28 @@ class BrandingConfig {
       logoUrl: json['logo'] as String? ?? json['myLogo'] as String?,
       mobileAppLogo: json['mobileAppLogo'] as String?,
       mobileAppTitle: json['mobileAppTitle'] as String?,
-      siteTitle: json['siteTitle'] as String? ?? json['site_title'] as String? ?? json['mySite'] as String? ?? json['title'] as String?,
+      siteTitle:
+          json['siteTitle'] as String? ??
+          json['site_title'] as String? ??
+          json['mySite'] as String? ??
+          json['title'] as String?,
       slogan: json['slogan'] as String?,
       primaryColor: parseColor(json['primaryColor'], defaults.primaryColor),
-      secondaryColor: parseColor(json['secondaryColor'], defaults.secondaryColor),
+      secondaryColor: parseColor(
+        json['secondaryColor'],
+        defaults.secondaryColor,
+      ),
       accentColor: parseColor(json['accentColor'], defaults.accentColor),
-      frontPageGraphId: json['mySiteFrontPage'] as String? ?? json['frontPageGraphId'] as String?,
+      frontPageGraphId:
+          json['mySiteFrontPage'] as String? ??
+          json['frontPageGraphId'] as String?,
       showSearchBar: json['showSearchBar'] as bool? ?? true,
-      contentFilterAreas: parseFilterAreas(json['selectedCategories'] ?? json['contentFilterAreas']),
-      menuItems: parseMenuItems(json['menuItems'] ?? json['menuConfig']?['items']),
+      contentFilterAreas: parseFilterAreas(
+        json['selectedCategories'] ?? json['contentFilterAreas'],
+      ),
+      menuItems: parseMenuItems(
+        json['menuItems'] ?? json['menuConfig']?['items'],
+      ),
       hasCustomBranding: true,
     );
   }
@@ -162,16 +177,19 @@ class BrandingConfig {
 
 /// Service for fetching and managing branding configuration
 class BrandingService {
-  static const String _apiBaseUrl = 'https://vegvisr-frontend.torarnehave.workers.dev';
+  static const String _apiBaseUrl =
+      'https://vegvisr-frontend.torarnehave.workers.dev';
 
   // Cached branding configuration
   static BrandingConfig? _cachedBranding;
 
   /// Get the current branding configuration (cached or default)
-  static BrandingConfig get currentBranding => _cachedBranding ?? BrandingConfig.defaultBranding();
+  static BrandingConfig get currentBranding =>
+      _cachedBranding ?? BrandingConfig.defaultBranding();
 
   /// Check if we have custom branding loaded
-  static bool get hasCustomBranding => _cachedBranding?.hasCustomBranding ?? false;
+  static bool get hasCustomBranding =>
+      _cachedBranding?.hasCustomBranding ?? false;
 
   /// Fetch branding configuration for a phone number
   /// Returns BrandingConfig (custom if found, default otherwise)
@@ -184,7 +202,8 @@ class BrandingService {
         return BrandingConfig.defaultBranding();
       }
 
-      final url = '$_apiBaseUrl/branding/by-phone?phone=${Uri.encodeComponent(normalizedPhone)}';
+      final url =
+          '$_apiBaseUrl/branding/by-phone?phone=${Uri.encodeComponent(normalizedPhone)}';
       debugPrint('BrandingService: Fetching branding from $url');
 
       final response = await http.get(Uri.parse(url));
@@ -194,7 +213,9 @@ class BrandingService {
 
         if (data['success'] == true && data['branding'] != null) {
           // Merge top-level fields into branding for parsing
-          final branding = Map<String, dynamic>.from(data['branding'] as Map<String, dynamic>);
+          final branding = Map<String, dynamic>.from(
+            data['branding'] as Map<String, dynamic>,
+          );
           // Add top-level domain if not in branding
           if (data['domain'] != null && branding['domain'] == null) {
             branding['domain'] = data['domain'];
@@ -203,16 +224,22 @@ class BrandingService {
           if (data['menuConfig'] != null && branding['menuConfig'] == null) {
             branding['menuConfig'] = data['menuConfig'];
           }
-          debugPrint('BrandingService: Found custom branding for domain: ${branding['domain']}');
+          debugPrint(
+            'BrandingService: Found custom branding for domain: ${branding['domain']}',
+          );
           _cachedBranding = BrandingConfig.fromJson(branding);
           return _cachedBranding!;
         } else {
-          debugPrint('BrandingService: No custom branding found, using defaults');
+          debugPrint(
+            'BrandingService: No custom branding found, using defaults',
+          );
           _cachedBranding = BrandingConfig.defaultBranding();
           return _cachedBranding!;
         }
       } else {
-        debugPrint('BrandingService: API error ${response.statusCode}: ${response.body}');
+        debugPrint(
+          'BrandingService: API error ${response.statusCode}: ${response.body}',
+        );
         return BrandingConfig.defaultBranding();
       }
     } catch (e) {
@@ -264,9 +291,7 @@ class BrandingService {
         backgroundColor: branding.primaryColor,
         foregroundColor: Colors.white,
       ),
-      drawerTheme: DrawerThemeData(
-        backgroundColor: Colors.white,
-      ),
+      drawerTheme: DrawerThemeData(backgroundColor: Colors.white),
     );
   }
 }

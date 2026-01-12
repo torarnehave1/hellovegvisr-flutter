@@ -269,10 +269,16 @@ class _MyAppState extends State<MyApp> {
               return ChatMediaViewerScreen(args: extra);
             }
             if (extra is Map) {
-              final mediaUrl = (extra['mediaUrl'] ?? extra['media_url'] ?? '').toString();
-              final contentType = extra['contentType']?.toString() ?? extra['media_content_type']?.toString();
+              final mediaUrl = (extra['mediaUrl'] ?? extra['media_url'] ?? '')
+                  .toString();
+              final contentType =
+                  extra['contentType']?.toString() ??
+                  extra['media_content_type']?.toString();
               return ChatMediaViewerScreen(
-                args: ChatMediaViewerArgs(mediaUrl: mediaUrl, contentType: contentType),
+                args: ChatMediaViewerArgs(
+                  mediaUrl: mediaUrl,
+                  contentType: contentType,
+                ),
               );
             }
             return const Scaffold(

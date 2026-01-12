@@ -281,7 +281,7 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
           child: InkWell(
             onTap: _openPoweredByLink,
             child: const Text(
-              'Powered by Vegvisr.org',
+              'Powered by VEGR.AI',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),

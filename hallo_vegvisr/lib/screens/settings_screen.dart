@@ -247,6 +247,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
+                    'Powered by VEGR.AI',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[500],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
                     'Made with love in Norway',
                     style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                   ),

@@ -10,11 +10,7 @@ class GroupInfoScreen extends StatefulWidget {
   final String groupId;
   final String? groupName;
 
-  const GroupInfoScreen({
-    super.key,
-    required this.groupId,
-    this.groupName,
-  });
+  const GroupInfoScreen({super.key, required this.groupId, this.groupName});
 
   @override
   State<GroupInfoScreen> createState() => _GroupInfoScreenState();
@@ -117,9 +113,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load members: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load members: $e')));
       }
     }
   }
@@ -196,7 +192,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             onPressed: () {
               Share.share(
                 'Join my group on Hallo Vegvisr: $_inviteLink',
-                subject: 'Join ${widget.groupName ?? "my group"} on Hallo Vegvisr',
+                subject:
+                    'Join ${widget.groupName ?? "my group"} on Hallo Vegvisr',
               );
               Navigator.pop(context);
             },
@@ -251,24 +248,26 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Group image updated')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Group image updated')));
         }
       } else {
         setState(() => _uploadingImage = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result['error'] ?? 'Failed to upload image')),
+            SnackBar(
+              content: Text(result['error'] ?? 'Failed to upload image'),
+            ),
           );
         }
       }
     } catch (e) {
       setState(() => _uploadingImage = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -305,7 +304,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                         children: [
                           CircleAvatar(
                             radius: 45,
-                            backgroundColor: Colors.white.withValues(alpha: 0.2),
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.2,
+                            ),
                             backgroundImage: _groupImageUrl != null
                                 ? NetworkImage(
                                     _cacheBustedImageUrl(
@@ -345,7 +346,10 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF4f6d7a),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
                                 ),
                                 child: const Icon(
                                   Icons.camera_alt,
@@ -405,7 +409,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                     label: 'Leave',
                     onTap: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Leave group coming soon')),
+                        const SnackBar(
+                          content: Text('Leave group coming soon'),
+                        ),
                       );
                     },
                   ),
@@ -455,10 +461,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                   const Spacer(),
                   Text(
                     '${_members.length}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -476,19 +479,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                   ),
                 )
               : SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final member = _members[index];
-                      return _buildMemberTile(member);
-                    },
-                    childCount: _members.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final member = _members[index];
+                    return _buildMemberTile(member);
+                  }, childCount: _members.length),
                 ),
 
           // Bottom padding
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 32),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
     );
@@ -514,10 +512,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF4f6d7a),
-              ),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF4f6d7a)),
             ),
           ],
         ),
@@ -547,9 +542,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: isMe
-            ? const Color(0xFF4f6d7a)
-            : Colors.grey.shade300,
+        backgroundColor: isMe ? const Color(0xFF4f6d7a) : Colors.grey.shade300,
         child: Text(
           initials,
           style: TextStyle(

@@ -170,25 +170,15 @@ class _HomeScreenState extends State<HomeScreen> {
               semanticsLabel: 'Vegvisr logo',
             ),
           ),
-          // Show "Powered by Hallo Vegvisr" below the branded logo
+          // Show platform tag below the branded logo
           const SizedBox(height: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Powered by ',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey[500],
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              SvgPicture.asset(
-                'assets/Black.svg',
-                width: 60,
-                semanticsLabel: 'Vegvisr logo',
-              ),
-            ],
+          Text(
+            'Powered by VEGR.AI',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[500],
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
       );
@@ -501,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: InkWell(
               onTap: _openPoweredByLink,
               child: const Text(
-                'Powered by Vegvisr.org',
+                'Powered by VEGR.AI',
                 style: TextStyle(color: Colors.grey),
               ),
             ),

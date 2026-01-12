@@ -18,13 +18,13 @@ import 'screens/ai_settings_screen.dart';
 import 'screens/group_chat_list_screen.dart';
 import 'screens/group_chat_screen.dart';
 import 'screens/group_info_screen.dart';
+import 'screens/chat_media_viewer_screen.dart';
 import 'screens/join_group_screen.dart';
 import 'screens/graph_ai_screen.dart';
 import 'screens/graph_viewer_screen.dart';
 import 'screens/debug_fcm_token_screen.dart';
 import 'screens/join_invitation_screen.dart';
 import 'services/push_notification_service.dart';
-import 'services/invitation_service.dart';
 
 // Background message handler - must be top-level function
 @pragma('vm:entry-point')
@@ -259,6 +259,25 @@ class _MyAppState extends State<MyApp> {
             final groupId = state.pathParameters['groupId']!;
             final groupName = state.extra as String?;
             return GroupInfoScreen(groupId: groupId, groupName: groupName);
+          },
+        ),
+        GoRoute(
+          path: '/media-viewer',
+          builder: (context, state) {
+            final extra = state.extra;
+            if (extra is ChatMediaViewerArgs) {
+              return ChatMediaViewerScreen(args: extra);
+            }
+            if (extra is Map) {
+              final mediaUrl = (extra['mediaUrl'] ?? extra['media_url'] ?? '').toString();
+              final contentType = extra['contentType']?.toString() ?? extra['media_content_type']?.toString();
+              return ChatMediaViewerScreen(
+                args: ChatMediaViewerArgs(mediaUrl: mediaUrl, contentType: contentType),
+              );
+            }
+            return const Scaffold(
+              body: Center(child: Text('Missing media info')),
+            );
           },
         ),
         GoRoute(

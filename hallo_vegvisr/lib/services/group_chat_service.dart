@@ -1,8 +1,252 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+
+class MessagesPage {
+  final List<Map<String, dynamic>> messages;
+  final bool hasMore;
+  final int? nextBefore;
+
+  const MessagesPage({
+    required this.messages,
+    required this.hasMore,
+    required this.nextBefore,
+  });
+}
 
 class GroupChatService {
   static const String baseUrl = 'https://group-chat-worker.torarnehave.workers.dev';
+
+  // Best-practice paging response for cursor-based history loads.
+  // Existing call sites can continue using `fetchMessages()`.
+  static const int _maxServerPageSize = 200;
+
+  static int? _tryParseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
+  static bool _tryParseBool(dynamic value) {
+    if (value is bool) return value;
+    final s = value?.toString().toLowerCase();
+    return s == '1' || s == 'true' || s == 'yes';
+  }
+
+  static List<Map<String, dynamic>> _parseMessages(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return <Map<String, dynamic>>[];
+  }
+
+  Map<String, dynamic>? _tryDecodeJson(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Never _throwHttpFailure({
+    required String action,
+    required int statusCode,
+    required String body,
+  }) {
+    final snippet = body.trim().isEmpty
+        ? '<empty body>'
+        : (body.length > 600 ? '${body.substring(0, 600)}…' : body);
+    throw Exception('$action failed (HTTP $statusCode): $snippet');
+  }
+
+  Future<Map<String, dynamic>> uploadMediaStream({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+    required Stream<List<int>> stream,
+    required int length,
+    required String fileName,
+    required String contentType,
+    void Function(int sentBytes, int totalBytes)? onProgress,
+    void Function(void Function() cancel)? onCancel,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/groups/$groupId/media?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
+    );
+
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    try {
+      final request = await client.postUrl(uri).timeout(const Duration(seconds: 15));
+      request.headers.set(HttpHeaders.contentTypeHeader, contentType);
+      request.headers.set('X-File-Name', fileName);
+      request.contentLength = length;
+
+      onCancel?.call(() {
+        try {
+          request.abort();
+        } catch (_) {
+          // ignore
+        }
+        client.close(force: true);
+      });
+
+      // Stream (no full buffering) + progress.
+      var sent = 0;
+      var sinceFlush = 0;
+      const flushEveryBytes = 1024 * 1024; // 1MB
+      await for (final chunk in stream.timeout(const Duration(minutes: 10))) {
+        request.add(chunk);
+        sent += chunk.length;
+        sinceFlush += chunk.length;
+        if (sinceFlush >= flushEveryBytes) {
+          sinceFlush = 0;
+          await request.flush();
+        }
+        onProgress?.call(sent, length);
+      }
+      onProgress?.call(length, length);
+      final response = await request.close().timeout(const Duration(minutes: 15));
+
+      final body = await utf8.decoder
+          .bind(response)
+          .join()
+          .timeout(const Duration(minutes: 2));
+
+      final data = _tryDecodeJson(body);
+      if (response.statusCode != 200) {
+        if (data != null && data['error'] != null) {
+          throw Exception('Upload failed (HTTP ${response.statusCode}): ${data['error']}');
+        }
+        _throwHttpFailure(action: 'Upload', statusCode: response.statusCode, body: body);
+      }
+      if (data == null) {
+        _throwHttpFailure(action: 'Upload', statusCode: response.statusCode, body: body);
+      }
+      if (data['success'] != true) {
+        throw Exception(data['error'] ?? 'Failed to upload media');
+      }
+      return Map<String, dynamic>.from(data);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadMediaFile({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+    required File file,
+    required String fileName,
+    required String contentType,
+  }) async {
+    final length = await file.length();
+    return uploadMediaStream(
+      groupId: groupId,
+      userId: userId,
+      phone: phone,
+      email: email,
+      stream: file.openRead(),
+      length: length,
+      fileName: fileName,
+      contentType: contentType,
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadMedia({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+    required Uint8List bytes,
+    required String fileName,
+    required String contentType,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/groups/$groupId/media?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
+    );
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': contentType,
+        'X-File-Name': fileName,
+      },
+      body: bytes,
+    );
+
+    final body = response.body;
+    final data = _tryDecodeJson(body);
+    if (response.statusCode != 200) {
+      if (data != null && data['error'] != null) {
+        throw Exception('Upload failed (HTTP ${response.statusCode}): ${data['error']}');
+      }
+      _throwHttpFailure(action: 'Upload', statusCode: response.statusCode, body: body);
+    }
+    if (data == null || data['success'] != true) {
+      throw Exception((data ?? const {})['error'] ?? 'Failed to upload media');
+    }
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> sendMediaMessage({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+    required String mediaUrl,
+    required String mediaType, // 'image' | 'video'
+    String? mediaObjectKey,
+    String? mediaContentType,
+    int? mediaSize,
+    String? videoThumbnailUrl,
+    int? videoDurationMs,
+    String? body,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/groups/$groupId/messages'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'type': mediaType,
+        'media_url': mediaUrl,
+        if (mediaObjectKey != null && mediaObjectKey.isNotEmpty)
+          'media_object_key': mediaObjectKey,
+        if (mediaContentType != null && mediaContentType.isNotEmpty)
+          'media_content_type': mediaContentType,
+        if (mediaSize != null) 'media_size': mediaSize,
+        if (mediaType == 'video' && videoThumbnailUrl != null && videoThumbnailUrl.isNotEmpty)
+          'video_thumbnail_url': videoThumbnailUrl,
+        if (mediaType == 'video' && videoDurationMs != null)
+          'video_duration_ms': videoDurationMs,
+        if (body != null && body.trim().isNotEmpty) 'body': body.trim(),
+      }),
+    );
+
+    final bodyJson = response.body;
+    final data = _tryDecodeJson(bodyJson);
+    if (response.statusCode != 201) {
+      if (data != null && data['error'] != null) {
+        throw Exception('Send failed (HTTP ${response.statusCode}): ${data['error']}');
+      }
+      _throwHttpFailure(action: 'Send', statusCode: response.statusCode, body: bodyJson);
+    }
+    if (data == null || data['success'] != true) {
+      throw Exception((data ?? const {})['error'] ?? 'Failed to send media message');
+    }
+    return Map<String, dynamic>.from(data['message']);
+  }
 
   Future<List<Map<String, dynamic>>> fetchGroups({
     required String userId,
@@ -56,14 +300,17 @@ class GroupChatService {
     required String phone,
     String? email,
     int after = 0,
+    int? before,
     int limit = 50,
     bool latest = false,
   }) async {
+    final clampedLimit = limit.clamp(1, _maxServerPageSize);
     final uri = Uri.parse(
       '$baseUrl/groups/$groupId/messages?user_id=${Uri.encodeComponent(userId)}'
       '&phone=${Uri.encodeComponent(phone)}'
       '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}'
-      '&after=$after&limit=$limit'
+      '&after=$after&limit=$clampedLimit'
+      '${before != null && before > 0 ? '&before=$before' : ''}'
       '${latest ? '&latest=1' : ''}',
     );
 
@@ -73,6 +320,46 @@ class GroupChatService {
       throw Exception(data['error'] ?? 'Failed to load messages');
     }
     return List<Map<String, dynamic>>.from(data['messages'] ?? []);
+  }
+
+  Future<MessagesPage> fetchMessagesPage({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+    int? before,
+    int limit = 10,
+  }) async {
+    final clampedLimit = limit.clamp(1, _maxServerPageSize);
+    final uri = Uri.parse(
+      '$baseUrl/groups/$groupId/messages?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}'
+      '&after=0&limit=$clampedLimit&latest=1'
+      '${before != null && before > 0 ? '&before=$before' : ''}',
+    );
+
+    final response = await http.get(uri);
+    final decoded = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || decoded == null || decoded['success'] != true) {
+      _throwHttpFailure(
+        action: 'Load messages',
+        statusCode: response.statusCode,
+        body: response.body,
+      );
+    }
+
+    final messages = _parseMessages(decoded['messages']);
+    final pagingRaw = decoded['paging'];
+    final paging = pagingRaw is Map ? Map<String, dynamic>.from(pagingRaw) : null;
+    final hasMore = paging != null
+      ? _tryParseBool(paging['has_more'])
+      : (messages.length == clampedLimit);
+    final nextBefore = paging != null
+      ? _tryParseInt(paging['next_before'])
+      : (messages.isNotEmpty ? (messages.first['id'] as int?) : null);
+
+    return MessagesPage(messages: messages, hasMore: hasMore, nextBefore: nextBefore);
   }
 
   Future<Map<String, dynamic>> sendMessage({

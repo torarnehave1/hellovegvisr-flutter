@@ -31,7 +31,7 @@ class BrandingConfig {
   final String? domain;
   final String? logoUrl;
   final String? mobileAppLogo; // Special logo for mobile app with "Powered by" branding
-  final String? mobileAppTitle; // Custom title to replace "HALLO VEGVISR" in mobile app
+  final String? mobileAppTitle; // Custom title to replace the default app title in mobile app
   final String? siteTitle;
   final String? slogan; // Brand tagline/slogan
   final Color primaryColor;

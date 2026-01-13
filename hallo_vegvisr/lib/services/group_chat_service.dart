@@ -431,6 +431,7 @@ class GroupChatService {
     String? email,
     required String audioUrl,
     int? audioDurationMs,
+    String? body,
     String? transcriptText,
     String? transcriptLang,
     String? transcriptionStatus,
@@ -444,6 +445,7 @@ class GroupChatService {
         if (email != null && email.isNotEmpty) 'email': email,
         'type': 'voice',
         'audio_url': audioUrl,
+        if (body != null && body.trim().isNotEmpty) 'body': body.trim(),
         if (audioDurationMs != null) 'audio_duration_ms': audioDurationMs,
         if (transcriptText != null) 'transcript_text': transcriptText,
         if (transcriptLang != null) 'transcript_lang': transcriptLang,
@@ -465,6 +467,7 @@ class GroupChatService {
     required String userId,
     required String phone,
     String? email,
+    String? body,
     String? transcriptText,
     String? transcriptLang,
     String? transcriptionStatus,
@@ -476,6 +479,7 @@ class GroupChatService {
         'user_id': userId,
         'phone': phone,
         if (email != null && email.isNotEmpty) 'email': email,
+        if (body != null && body.trim().isNotEmpty) 'body': body.trim(),
         if (transcriptText != null) 'transcript_text': transcriptText,
         if (transcriptLang != null) 'transcript_lang': transcriptLang,
         if (transcriptionStatus != null)
@@ -488,6 +492,33 @@ class GroupChatService {
       throw Exception(data['error'] ?? 'Failed to update transcript');
     }
     return Map<String, dynamic>.from(data['message']);
+  }
+
+  Future<void> deleteMessage({
+    required String groupId,
+    required int messageId,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/groups/$groupId/messages/$messageId?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
+    );
+
+    final response = await http.delete(uri);
+    final decoded = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || decoded == null || decoded['success'] != true) {
+      if (decoded != null && decoded['error'] != null) {
+        throw Exception(decoded['error']);
+      }
+      _throwHttpFailure(
+        action: 'Delete message',
+        statusCode: response.statusCode,
+        body: response.body,
+      );
+    }
   }
 
   /// Create an invite link for a group (owner/admin only)

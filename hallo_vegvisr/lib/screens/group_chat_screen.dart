@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -80,6 +80,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   DateTime? _recordingStartedAt;
   String? _pendingVoicePath;
   int? _pendingVoiceDurationMs;
+  bool _sendVoiceWithTranscript = false;
   bool _isDraftPlaying = false;
   int _lastMessageId = 0;
   final List<Map<String, dynamic>> _messages = [];
@@ -330,7 +331,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             );
           }
         } catch (e) {
-          throw e;
+          rethrow;
         }
 
         // Derive duration and generate a poster thumbnail locally for fast chat previews.
@@ -875,6 +876,57 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  Future<void> _postTranscriptAsText(String transcriptText) async {
+    final text = transcriptText.trim();
+    if (text.isEmpty) return;
+    if (_userId == null || _phone == null) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final tempId = -now;
+    final tempMessage = {
+      'id': tempId,
+      'group_id': widget.groupId,
+      'user_id': _userId,
+      'body': text,
+      'created_at': now,
+      'message_type': 'text',
+    };
+
+    setState(() {
+      _messages.add(tempMessage);
+    });
+    _scrollToBottom(force: true);
+
+    try {
+      final message = await _chatService.sendMessage(
+        groupId: widget.groupId,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+        body: text,
+      );
+      if (!mounted) return;
+      setState(() {
+        final index = _messages.indexWhere((m) => m['id'] == tempId);
+        if (index != -1) {
+          _messages[index] = message;
+        } else {
+          _messages.add(message);
+        }
+        _lastMessageId = message['id'] as int;
+      });
+      _scrollToBottom(force: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messages.removeWhere((m) => m['id'] == tempId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to post transcript: $e')),
+      );
+    }
+  }
+
   Future<void> _toggleVoiceRecording() async {
     if (_recording) {
       final path = await _recorder.stop();
@@ -888,6 +940,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         setState(() {
           _pendingVoicePath = path;
           _pendingVoiceDurationMs = duration;
+          _sendVoiceWithTranscript = false;
         });
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -929,13 +982,20 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     });
   }
 
-  Future<void> _sendVoiceMessageFromPath(String path, {int? durationMs}) async {
+  Future<void> _sendVoiceMessageFromPath(
+    String path, {
+    int? durationMs,
+    bool? transcribeBeforeSend,
+  }) async {
     if (_userId == null || _phone == null) {
       return;
     }
     if (_sendingVoice) {
       return;
     }
+
+    final shouldTranscribeBeforeSend =
+        transcribeBeforeSend ?? _sendVoiceWithTranscript;
 
     _draftPlayer.stop();
     setState(() {
@@ -987,6 +1047,38 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         }
       });
 
+      String? transcriptText;
+      String? transcriptLang;
+      String transcriptionStatus = 'none';
+
+      if (shouldTranscribeBeforeSend) {
+        setState(() {
+          final index = _messages.indexWhere((m) => m['id'] == tempId);
+          if (index != -1) {
+            _messages[index] = {
+              ..._messages[index],
+              'transcription_status': 'transcribing',
+            };
+          }
+        });
+        try {
+          final result = await _voiceNoteService.transcribe(audioUrl: audioUrl);
+          final text = result['text']?.toString().trim() ?? '';
+          transcriptText = text.isEmpty ? null : text;
+          transcriptLang = result['language']?.toString();
+          if (transcriptText != null) {
+            transcriptionStatus = 'complete';
+          } else {
+            transcriptionStatus = 'none';
+          }
+        } catch (_) {
+          // If transcription fails, still send the voice note.
+          transcriptText = null;
+          transcriptLang = null;
+          transcriptionStatus = 'none';
+        }
+      }
+
       final message = await _chatService.sendVoiceMessage(
         groupId: widget.groupId,
         userId: _userId!,
@@ -994,7 +1086,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         email: _email,
         audioUrl: audioUrl,
         audioDurationMs: durationMs,
-        transcriptionStatus: 'none',
+        transcriptText: transcriptText,
+        transcriptLang: transcriptLang,
+        transcriptionStatus: transcriptionStatus,
       );
       setState(() {
         _messages.removeWhere(
@@ -1009,6 +1103,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         _lastMessageId = message['id'] as int;
         _pendingVoicePath = null;
         _pendingVoiceDurationMs = null;
+        _sendVoiceWithTranscript = false;
       });
       _scrollToBottom(force: true);
     } catch (e) {
@@ -1032,6 +1127,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       _pendingVoicePath = null;
       _pendingVoiceDurationMs = null;
       _recordingStartedAt = null;
+      _sendVoiceWithTranscript = false;
       _isDraftPlaying = false;
     });
     _draftPlayer.stop();
@@ -1123,25 +1219,43 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final audioUrl = message['audio_url']?.toString() ?? '';
     if (audioUrl.isEmpty) return;
 
+    final existingTranscript =
+        (message['transcript_text']?.toString() ?? '').trim();
+
     setState(() {
       _transcribingMessages.add(id);
     });
 
     try {
-      final result = await _voiceNoteService.transcribe(audioUrl: audioUrl);
-      final transcriptText = result['text']?.toString() ?? '';
-      final transcriptLang = result['language']?.toString();
-      final updated = await _chatService.updateMessageTranscript(
-        groupId: widget.groupId,
-        messageId: id,
-        userId: _userId ?? '',
-        phone: _phone ?? '',
-        email: _email,
-        transcriptText: transcriptText,
-        transcriptLang: transcriptLang,
-        transcriptionStatus: 'complete',
-      );
-      _replaceMessage(updated);
+      String resolvedTranscript = existingTranscript;
+      String? transcriptLang;
+
+      if (resolvedTranscript.isEmpty) {
+        final result = await _voiceNoteService.transcribe(audioUrl: audioUrl);
+        resolvedTranscript = (result['text']?.toString() ?? '').trim();
+        transcriptLang = result['language']?.toString();
+      }
+
+      if (resolvedTranscript.isEmpty) {
+        throw Exception('No transcript returned');
+      }
+
+      if (_userId != null && _phone != null) {
+        final updated = await _chatService.updateMessageTranscript(
+          groupId: widget.groupId,
+          messageId: id,
+          userId: _userId!,
+          phone: _phone!,
+          email: _email,
+          transcriptText: resolvedTranscript,
+          transcriptLang: transcriptLang,
+          transcriptionStatus: 'complete',
+        );
+        _replaceMessage(updated);
+      }
+
+      // UX requirement: transcript should be an independent text message.
+      await _postTranscriptAsText(resolvedTranscript);
     } catch (e) {
       if (_userId != null && _phone != null) {
         try {
@@ -1167,6 +1281,102 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         });
       }
     }
+  }
+
+  Future<void> _deleteMessage(Map<String, dynamic> message) async {
+    final id = message['id'];
+    if (id is! int || id <= 0) return;
+    if (_userId == null || _phone == null) return;
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete message?'),
+          content: const Text('This cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldDelete != true) return;
+
+    final index = _messages.indexWhere((m) => m['id'] == id);
+    if (index == -1) return;
+    final removed = _messages[index];
+
+    // Stop playback if we delete the currently playing voice note.
+    final audioUrl = removed['audio_url']?.toString() ?? '';
+    if (audioUrl.isNotEmpty && _playingAudioUrl == audioUrl) {
+      try {
+        await _audioPlayer.stop();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _playingAudioUrl = null;
+        _isPlayingAudio = false;
+      });
+    }
+
+    setState(() {
+      _messages.removeAt(index);
+    });
+
+    try {
+      await _chatService.deleteMessage(
+        groupId: widget.groupId,
+        messageId: id,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        final stillPresent = _messages.any((m) => m['id'] == id);
+        if (!stillPresent) {
+          _messages.insert(index.clamp(0, _messages.length), removed);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete message: $e')),
+      );
+    }
+  }
+
+  void _showMessageActions(Map<String, dynamic> message, bool isMine) {
+    final id = message['id'];
+    if (id is! int || id <= 0) return;
+    if (_userId == null || _phone == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: Text(isMine ? 'Delete message' : 'Delete (if allowed)'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _deleteMessage(message);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _replaceMessage(Map<String, dynamic> updated) {
@@ -1587,13 +1797,23 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       child: messageContent,
     );
 
+    final id = message['id'];
+    final canShowActions = (id is int && id > 0);
+    final interactiveBubble = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: canShowActions
+          ? () => _showMessageActions(message, isMine)
+          : null,
+      child: messageBubble,
+    );
+
     // For my messages, just show the bubble aligned right
     if (isMine) {
       return Align(
         alignment: Alignment.centerRight,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: messageBubble,
+          child: interactiveBubble,
         ),
       );
     }
@@ -1624,7 +1844,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
           const SizedBox(width: 8),
           // Message bubble
-          Flexible(child: messageBubble),
+          Flexible(child: interactiveBubble),
         ],
       ),
     );
@@ -1665,27 +1885,120 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
 
     if (isVoice) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
+      final transcriptText = message['transcript_text']?.toString() ?? '';
+      final transcriptionStatus =
+          message['transcription_status']?.toString() ?? '';
+      final id = message['id'];
+      final messageId = id is int ? id : null;
+      final isExpanded =
+        messageId != null && _expandedVoiceMessages.contains(messageId);
+      final isTranscribing = id is int && _transcribingMessages.contains(id);
+      final showTranscribing =
+          isTranscribing ||
+          (transcriptionStatus == 'transcribing' && transcriptText.isEmpty);
+      final canTranscribe = audioUrl.isNotEmpty && id is int && !showTranscribing;
+      final isPlaying =
+          audioUrl.isNotEmpty && _playingAudioUrl == audioUrl && _isPlayingAudio;
+      final label = 'Voice message';
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.mic_none, color: textColor, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Voice message',
-              style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (audioUrl.isNotEmpty)
-            TextButton(
-              onPressed: () => _shareVoiceMessage(message),
-              style: TextButton.styleFrom(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  isPlaying ? Icons.pause_circle : Icons.play_circle,
+                  color: textColor,
+                  size: 20,
+                ),
+                onPressed: audioUrl.isEmpty ? null : () => _togglePlayback(audioUrl),
                 padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: messageId == null
+                      ? null
+                      : () => _toggleVoiceExpanded(messageId),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: isExpanded ? null : 2,
+                    overflow:
+                        isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              if (audioUrl.isNotEmpty)
+                TextButton(
+                  onPressed: () => _shareVoiceMessage(message),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text('Share', style: TextStyle(color: subTextColor)),
+                ),
+            ],
+          ),
+          if (audioUrl.isEmpty && transcriptionStatus == 'uploading')
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Uploading voice message...',
+                style: TextStyle(color: subTextColor, fontSize: 12),
+              ),
+            ),
+          if (transcriptionStatus == 'failed' && transcriptText.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Transcription failed',
+                style: TextStyle(color: subTextColor, fontSize: 12),
+              ),
+            ),
+          if (canTranscribe)
+            TextButton.icon(
+              onPressed: () => _transcribeVoiceMessage(message),
+              icon: Icon(
+                Icons.text_snippet_outlined,
+                size: 16,
+                color: subTextColor,
+              ),
+              label: Text('Transcribe', style: TextStyle(color: subTextColor)),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.only(top: 4),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text('Share', style: TextStyle(color: subTextColor)),
+            ),
+          if (showTranscribing)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 12,
+                    width: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: subTextColor,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Transcribing...',
+                    style: TextStyle(color: subTextColor, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
         ],
       );
@@ -1767,14 +2080,14 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         messageId != null && _expandedVoiceMessages.contains(messageId);
     final isPlaying =
         audioUrl.isNotEmpty && _playingAudioUrl == audioUrl && _isPlayingAudio;
-    final canTranscribe =
-        transcriptText.isEmpty &&
-        audioUrl.isNotEmpty &&
-        id is int &&
-        !_transcribingMessages.contains(id);
+    final isTranscribing = id is int && _transcribingMessages.contains(id);
+    final showTranscribing =
+        isTranscribing ||
+        (transcriptionStatus == 'transcribing' && transcriptText.trim().isEmpty);
+    final canTranscribe = audioUrl.isNotEmpty && id is int && !showTranscribing;
     final textColor = isMine ? Colors.white : Colors.black87;
     final subTextColor = isMine ? Colors.white70 : Colors.black54;
-    final label = transcriptText.isNotEmpty ? transcriptText : 'Voice message';
+    final label = 'Voice message';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1786,26 +2099,23 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               icon: Icon(
                 isPlaying ? Icons.pause_circle : Icons.play_circle,
                 color: textColor,
+                size: 20,
               ),
-              onPressed: audioUrl.isEmpty
-                  ? null
-                  : () => _togglePlayback(audioUrl),
+              onPressed: audioUrl.isEmpty ? null : () => _togglePlayback(audioUrl),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: GestureDetector(
-                onTap: messageId == null
-                    ? null
-                    : () => _toggleVoiceExpanded(messageId),
+                onTap:
+                    messageId == null ? null : () => _toggleVoiceExpanded(messageId),
                 child: Text(
                   label,
                   style: TextStyle(color: textColor),
                   maxLines: isExpanded ? null : 2,
-                  overflow: isExpanded
-                      ? TextOverflow.visible
-                      : TextOverflow.ellipsis,
+                  overflow:
+                      isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1819,7 +2129,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               style: TextStyle(color: subTextColor, fontSize: 12),
             ),
           ),
-        if (transcriptionStatus == 'failed' && transcriptText.isEmpty)
+        if (transcriptionStatus == 'failed' && transcriptText.trim().isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -1865,7 +2175,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-        if (!canTranscribe && _transcribingMessages.contains(id))
+        if (showTranscribing)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Row(
@@ -2302,6 +2612,26 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.text_snippet_outlined,
+                                  color: _sendVoiceWithTranscript
+                                      ? const Color(0xFF4f6d7a)
+                                      : Colors.grey,
+                                ),
+                                tooltip: _sendVoiceWithTranscript
+                                    ? 'Will transcribe before sending'
+                                    : 'Send as voice only (no transcript)'
+                                        '\nTap to include transcript',
+                                onPressed: _sendingVoice
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _sendVoiceWithTranscript =
+                                              !_sendVoiceWithTranscript;
+                                        });
+                                      },
+                              ),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
@@ -2372,10 +2702,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 icon: const Icon(Icons.send, color: Color(0xFF4f6d7a)),
                 onPressed: () {
                   if (_pendingVoicePath != null) {
-                    _sendVoiceMessageFromPath(
-                      _pendingVoicePath!,
-                      durationMs: _pendingVoiceDurationMs,
-                    );
+                      _sendVoiceMessageFromPath(
+                        _pendingVoicePath!,
+                        durationMs: _pendingVoiceDurationMs,
+                        transcribeBeforeSend: _sendVoiceWithTranscript,
+                      );
                   } else {
                     _sendMessage();
                   }

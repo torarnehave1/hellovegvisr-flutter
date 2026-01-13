@@ -96,10 +96,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Share invite link for the current brand
   Future<void> _shareInviteLink() async {
-    // Only show if user has custom branding (belongs to a brand)
+    // If the user is not inside a branded app, invite them to join Hallo Vegvisr itself.
     if (!_branding.hasCustomBranding || _branding.domain == null) {
+      const webUrl = 'https://hallo.vegvisr.org';
+      const androidApkUrl = 'https://apps.vegvisr.org/download/hallo-vegvisr.apk';
+
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Join me on Hallo Vegvisr!\n\nWeb: $webUrl\nAndroid: $androidApkUrl',
+          subject: 'Invitation to Hallo Vegvisr',
+        ),
+      );
+      return;
+    }
+
+    if (_userPhone == null || _userPhone!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No brand to invite users to')),
+        const SnackBar(content: Text('You must be logged in to invite users')),
       );
       return;
     }

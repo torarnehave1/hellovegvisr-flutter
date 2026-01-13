@@ -99,11 +99,13 @@ class _HomeScreenState extends State<HomeScreen> {
     // If the user is not inside a branded app, invite them to join Hallo Vegvisr itself.
     if (!_branding.hasCustomBranding || _branding.domain == null) {
       const webUrl = 'https://hallo.vegvisr.org';
-      const androidApkUrl = 'https://apps.vegvisr.org/download/hallo-vegvisr.apk';
+      const androidApkUrl =
+          'https://apps.vegvisr.org/download/hallo-vegvisr.apk';
 
       await SharePlus.instance.share(
         ShareParams(
-          text: 'Join me on Hallo Vegvisr!\n\nWeb: $webUrl\nAndroid: $androidApkUrl',
+          text:
+              'Join me on Hallo Vegvisr!\n\nWeb: $webUrl\nAndroid: $androidApkUrl',
           subject: 'Invitation to Hallo Vegvisr',
         ),
       );

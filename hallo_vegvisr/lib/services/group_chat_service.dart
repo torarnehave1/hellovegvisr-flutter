@@ -509,7 +509,9 @@ class GroupChatService {
 
     final response = await http.delete(uri);
     final decoded = _tryDecodeJson(response.body);
-    if (response.statusCode != 200 || decoded == null || decoded['success'] != true) {
+    if (response.statusCode != 200 ||
+        decoded == null ||
+        decoded['success'] != true) {
       if (decoded != null && decoded['error'] != null) {
         throw Exception(decoded['error']);
       }

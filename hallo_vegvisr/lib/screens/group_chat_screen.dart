@@ -921,9 +921,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       setState(() {
         _messages.removeWhere((m) => m['id'] == tempId);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to post transcript: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to post transcript: $e')));
     }
   }
 
@@ -1219,8 +1219,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final audioUrl = message['audio_url']?.toString() ?? '';
     if (audioUrl.isEmpty) return;
 
-    final existingTranscript =
-        (message['transcript_text']?.toString() ?? '').trim();
+    final existingTranscript = (message['transcript_text']?.toString() ?? '')
+        .trim();
 
     setState(() {
       _transcribingMessages.add(id);
@@ -1346,9 +1346,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           _messages.insert(index.clamp(0, _messages.length), removed);
         }
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete message: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete message: $e')));
     }
   }
 
@@ -1365,7 +1365,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                ),
                 title: Text(isMine ? 'Delete message' : 'Delete (if allowed)'),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -1891,14 +1894,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       final id = message['id'];
       final messageId = id is int ? id : null;
       final isExpanded =
-        messageId != null && _expandedVoiceMessages.contains(messageId);
+          messageId != null && _expandedVoiceMessages.contains(messageId);
       final isTranscribing = id is int && _transcribingMessages.contains(id);
       final showTranscribing =
           isTranscribing ||
           (transcriptionStatus == 'transcribing' && transcriptText.isEmpty);
-      final canTranscribe = audioUrl.isNotEmpty && id is int && !showTranscribing;
+      final canTranscribe =
+          audioUrl.isNotEmpty && id is int && !showTranscribing;
       final isPlaying =
-          audioUrl.isNotEmpty && _playingAudioUrl == audioUrl && _isPlayingAudio;
+          audioUrl.isNotEmpty &&
+          _playingAudioUrl == audioUrl &&
+          _isPlayingAudio;
       final label = 'Voice message';
 
       return Column(
@@ -1913,7 +1919,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   color: textColor,
                   size: 20,
                 ),
-                onPressed: audioUrl.isEmpty ? null : () => _togglePlayback(audioUrl),
+                onPressed: audioUrl.isEmpty
+                    ? null
+                    : () => _togglePlayback(audioUrl),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -1930,8 +1938,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: isExpanded ? null : 2,
-                    overflow:
-                        isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                    overflow: isExpanded
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -2083,7 +2092,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final isTranscribing = id is int && _transcribingMessages.contains(id);
     final showTranscribing =
         isTranscribing ||
-        (transcriptionStatus == 'transcribing' && transcriptText.trim().isEmpty);
+        (transcriptionStatus == 'transcribing' &&
+            transcriptText.trim().isEmpty);
     final canTranscribe = audioUrl.isNotEmpty && id is int && !showTranscribing;
     final textColor = isMine ? Colors.white : Colors.black87;
     final subTextColor = isMine ? Colors.white70 : Colors.black54;
@@ -2101,21 +2111,25 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 color: textColor,
                 size: 20,
               ),
-              onPressed: audioUrl.isEmpty ? null : () => _togglePlayback(audioUrl),
+              onPressed: audioUrl.isEmpty
+                  ? null
+                  : () => _togglePlayback(audioUrl),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
             const SizedBox(width: 6),
             Expanded(
               child: GestureDetector(
-                onTap:
-                    messageId == null ? null : () => _toggleVoiceExpanded(messageId),
+                onTap: messageId == null
+                    ? null
+                    : () => _toggleVoiceExpanded(messageId),
                 child: Text(
                   label,
                   style: TextStyle(color: textColor),
                   maxLines: isExpanded ? null : 2,
-                  overflow:
-                      isExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  overflow: isExpanded
+                      ? TextOverflow.visible
+                      : TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -2612,26 +2626,26 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.text_snippet_outlined,
-                                  color: _sendVoiceWithTranscript
-                                      ? const Color(0xFF4f6d7a)
-                                      : Colors.grey,
-                                ),
-                                tooltip: _sendVoiceWithTranscript
-                                    ? 'Will transcribe before sending'
-                                    : 'Send as voice only (no transcript)'
-                                        '\nTap to include transcript',
-                                onPressed: _sendingVoice
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _sendVoiceWithTranscript =
-                                              !_sendVoiceWithTranscript;
-                                        });
-                                      },
-                              ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.text_snippet_outlined,
+                              color: _sendVoiceWithTranscript
+                                  ? const Color(0xFF4f6d7a)
+                                  : Colors.grey,
+                            ),
+                            tooltip: _sendVoiceWithTranscript
+                                ? 'Will transcribe before sending'
+                                : 'Send as voice only (no transcript)'
+                                      '\nTap to include transcript',
+                            onPressed: _sendingVoice
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _sendVoiceWithTranscript =
+                                          !_sendVoiceWithTranscript;
+                                    });
+                                  },
+                          ),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
@@ -2702,11 +2716,11 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 icon: const Icon(Icons.send, color: Color(0xFF4f6d7a)),
                 onPressed: () {
                   if (_pendingVoicePath != null) {
-                      _sendVoiceMessageFromPath(
-                        _pendingVoicePath!,
-                        durationMs: _pendingVoiceDurationMs,
-                        transcribeBeforeSend: _sendVoiceWithTranscript,
-                      );
+                    _sendVoiceMessageFromPath(
+                      _pendingVoicePath!,
+                      durationMs: _pendingVoiceDurationMs,
+                      transcribeBeforeSend: _sendVoiceWithTranscript,
+                    );
                   } else {
                     _sendMessage();
                   }

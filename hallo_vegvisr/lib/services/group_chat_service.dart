@@ -405,6 +405,7 @@ class GroupChatService {
     required String phone,
     String? email,
     required String body,
+    int? replyToId,
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/groups/$groupId/messages'),
@@ -414,6 +415,7 @@ class GroupChatService {
         'phone': phone,
         if (email != null && email.isNotEmpty) 'email': email,
         'body': body,
+        if (replyToId != null) 'reply_to_id': replyToId,
       }),
     );
 
@@ -652,5 +654,179 @@ class GroupChatService {
       throw Exception(data['error'] ?? 'Failed to load members');
     }
     return List<Map<String, dynamic>>.from(data['members'] ?? []);
+  }
+
+  // ── Reactions ──────────────────────────────────────────────────
+
+  /// Toggle a reaction on a message (thumbs_up, heart, smile)
+  Future<Map<String, dynamic>> toggleReaction({
+    required int messageId,
+    required String reaction,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/messages/$messageId/reactions'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'reaction': reaction,
+      }),
+    );
+
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || data == null || data['success'] != true) {
+      throw Exception(data?['error'] ?? 'Failed to toggle reaction');
+    }
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Fetch reactions for a batch of messages
+  Future<Map<String, dynamic>> fetchReactions({
+    required String groupId,
+    required List<int> messageIds,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    if (messageIds.isEmpty) return {};
+    final ids = messageIds.join(',');
+    final uri = Uri.parse(
+      '$baseUrl/groups/$groupId/reactions?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}'
+      '&message_ids=$ids',
+    );
+
+    final response = await http.get(uri);
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || data == null || data['success'] != true) {
+      return {};
+    }
+    return Map<String, dynamic>.from(data['reactions'] ?? {});
+  }
+
+  // ── Polls ──────────────────────────────────────────────────────
+
+  /// Create a poll in a group
+  Future<Map<String, dynamic>> createPoll({
+    required String groupId,
+    required String question,
+    required List<String> options,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/groups/$groupId/polls'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'question': question,
+        'options': options,
+      }),
+    );
+
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 201 || data == null || data['success'] != true) {
+      throw Exception(data?['error'] ?? 'Failed to create poll');
+    }
+    return Map<String, dynamic>.from(data['poll']);
+  }
+
+  /// Vote on a poll
+  Future<Map<String, dynamic>> votePoll({
+    required String pollId,
+    required int optionIndex,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/polls/$pollId/vote'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'option_index': optionIndex,
+      }),
+    );
+
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || data == null || data['success'] != true) {
+      throw Exception(data?['error'] ?? 'Failed to vote');
+    }
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Fetch a single poll
+  Future<Map<String, dynamic>> fetchPoll({
+    required String pollId,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/polls/$pollId?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
+    );
+
+    final response = await http.get(uri);
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || data == null || data['success'] != true) {
+      throw Exception(data?['error'] ?? 'Failed to fetch poll');
+    }
+    return Map<String, dynamic>.from(data['poll']);
+  }
+
+  /// Get unanswered poll count for a group
+  Future<int> fetchUnansweredPollCount({
+    required String groupId,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final uri = Uri.parse(
+      '$baseUrl/groups/$groupId/polls/unanswered?user_id=${Uri.encodeComponent(userId)}'
+      '&phone=${Uri.encodeComponent(phone)}'
+      '${email != null && email.isNotEmpty ? '&email=${Uri.encodeComponent(email)}' : ''}',
+    );
+
+    final response = await http.get(uri);
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || data == null || data['success'] != true) {
+      return 0;
+    }
+    return (data['unanswered_count'] as int?) ?? 0;
+  }
+
+  /// Close a poll
+  Future<void> closePoll({
+    required String pollId,
+    required String userId,
+    required String phone,
+    String? email,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/polls/$pollId/close'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'phone': phone,
+        if (email != null && email.isNotEmpty) 'email': email,
+      }),
+    );
+
+    final data = _tryDecodeJson(response.body);
+    if (response.statusCode != 200 || data == null || data['success'] != true) {
+      throw Exception(data?['error'] ?? 'Failed to close poll');
+    }
   }
 }

@@ -127,7 +127,13 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - sqflite_darwin (0.0.4):
+    - Flutter
+    - FlutterMacOS
   - url_launcher_macos (0.0.1):
+    - FlutterMacOS
+  - video_player_avfoundation (0.0.1):
+    - Flutter
     - FlutterMacOS
 
 DEPENDENCIES:
@@ -145,7 +151,9 @@ DEPENDENCIES:
   - record_macos (from `Flutter/ephemeral/.symlinks/plugins/record_macos/macos`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - sqflite_darwin (from `Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
+  - video_player_avfoundation (from `Flutter/ephemeral/.symlinks/plugins/video_player_avfoundation/darwin`)
 
 SPEC REPOS:
   trunk:
@@ -195,8 +203,12 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
   shared_preferences_foundation:
     :path: Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin
+  sqflite_darwin:
+    :path: Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin
   url_launcher_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos
+  video_player_avfoundation:
+    :path: Flutter/ephemeral/.symlinks/plugins/video_player_avfoundation/darwin
 
 SPEC CHECKSUMS:
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
@@ -227,9 +239,11 @@ SPEC CHECKSUMS:
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   record_macos: 43194b6c06ca6f8fa132e2acea72b202b92a0f5b
-  share_plus: 3c787998077d6b31e839225a282e9e27edf99274
+  share_plus: 510bf0af1a42cd602274b4629920c9649c52f4cc
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
+  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
+  video_player_avfoundation: dd410b52df6d2466a42d28550e33e4146928280a
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
 

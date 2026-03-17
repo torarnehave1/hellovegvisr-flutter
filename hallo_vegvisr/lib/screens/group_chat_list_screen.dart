@@ -21,6 +21,7 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
   String? _phone;
   String? _email;
   List<Map<String, dynamic>> _groups = [];
+  Map<String, int> _unansweredPolls = {};
   static const String _groupsCacheKey = 'cached_group_chats';
 
   String? _cacheBustedImageUrl(String? url, int? updatedAt) {
@@ -141,6 +142,7 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_groupsCacheKey, jsonEncode(_groups));
+      _loadUnansweredPolls();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -154,6 +156,25 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadUnansweredPolls() async {
+    if (_userId == null || _phone == null || _groups.isEmpty) return;
+    final counts = <String, int>{};
+    for (final g in _groups) {
+      final id = g['id']?.toString();
+      if (id == null) continue;
+      try {
+        final count = await _chatService.fetchUnansweredPollCount(
+          groupId: id,
+          userId: _userId!,
+          phone: _phone!,
+          email: _email,
+        );
+        if (count > 0) counts[id] = count;
+      } catch (_) {}
+    }
+    if (mounted) setState(() => _unansweredPolls = counts);
   }
 
   Future<void> _showCreateGroupDialog() async {
@@ -248,6 +269,8 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
                         : null,
                     group['updated_at'] as int?,
                   );
+                  final groupId = group['id']?.toString() ?? '';
+                  final pollCount = _unansweredPolls[groupId] ?? 0;
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: const Color(0xFF4f6d7a),
@@ -260,7 +283,23 @@ class _GroupChatListScreenState extends State<GroupChatListScreen> {
                           : null,
                     ),
                     title: Text(name),
-                    subtitle: const Text('Tap to open chat'),
+                    subtitle: pollCount > 0
+                        ? Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '$pollCount unanswered poll${pollCount > 1 ? 's' : ''}',
+                                  style: const TextStyle(fontSize: 11, color: Colors.amber),
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Text('Tap to open chat'),
                     onTap: () async {
                       await context.push(
                         '/group-chat/${group['id']}',

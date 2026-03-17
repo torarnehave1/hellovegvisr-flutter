@@ -97,6 +97,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _imagePicker = ImagePicker();
   final Map<int, void Function()> _cancelUploadByTempId = {};
 
+  // ── Reactions state ──
+  Map<int, Map<String, dynamic>> _messageReactions = {};
+
+  // ── Reply-to state ──
+  Map<String, dynamic>? _replyToMessage;
+
+  // ── Emoji picker state ──
+  bool _showEmojiPicker = false;
+
+  // ── Poll creator state ──
+  bool _showPollCreator = false;
+  bool _creatingPoll = false;
+
   String? _scrollDayOverlayLabel;
   bool _showScrollDayOverlay = false;
   Timer? _scrollDayOverlayTimer;
@@ -666,6 +679,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToBottom(force: true);
       });
+      // Load reactions for initial messages
+      final ids = _messages
+          .map((m) => m['id'] as int?)
+          .whereType<int>()
+          .where((id) => id > 0)
+          .toList();
+      if (ids.isNotEmpty) _loadReactions(ids);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -828,6 +848,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             _lastMessageId = _messages.last['id'] as int;
           });
           _scrollToBottom();
+          // Load reactions for new messages
+          final newIds = newMessages
+              .map((m) => m['id'] as int?)
+              .whereType<int>()
+              .where((id) => id > 0)
+              .toList();
+          if (newIds.isNotEmpty) _loadReactions(newIds);
         }
       }
     } catch (_) {
@@ -850,6 +877,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
     setState(() => _sending = true);
     _messageController.clear();
+    final replyId = _replyToMessage?['id'] as int?;
+    _clearReplyTo();
     try {
       final message = await _chatService.sendMessage(
         groupId: widget.groupId,
@@ -857,6 +886,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         phone: _phone!,
         email: _email,
         body: text,
+        replyToId: replyId,
       );
       setState(() {
         _messages.add(message);
@@ -1352,6 +1382,166 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     }
   }
 
+  // ── Reactions ──────────────────────────────────────────────────
+
+  static const _reactionEmojis = {
+    'thumbs_up': '\u{1F44D}',
+    'heart': '\u{2764}\u{FE0F}',
+    'smile': '\u{1F60A}',
+  };
+
+  Future<void> _loadReactions(List<int> messageIds) async {
+    if (_userId == null || _phone == null || messageIds.isEmpty) return;
+    try {
+      final data = await _chatService.fetchReactions(
+        groupId: widget.groupId,
+        messageIds: messageIds,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+      );
+      if (!mounted) return;
+      setState(() {
+        data.forEach((key, value) {
+          final id = int.tryParse(key.toString());
+          if (id != null && value is Map) {
+            _messageReactions[id] = Map<String, dynamic>.from(value);
+          }
+        });
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _toggleReaction(int messageId, String reaction) async {
+    if (_userId == null || _phone == null) return;
+    try {
+      final result = await _chatService.toggleReaction(
+        messageId: messageId,
+        reaction: reaction,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+      );
+      if (!mounted) return;
+      setState(() {
+        _messageReactions[messageId] = {
+          'counts': result['reactions'] ?? {},
+          'my_reactions': List<String>.from(result['my_reactions'] ?? []),
+        };
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reaction failed: $e')),
+        );
+      }
+    }
+  }
+
+  void _showReactionPicker(int messageId) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: _reactionEmojis.entries.map((entry) {
+              return GestureDetector(
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _toggleReaction(messageId, entry.key);
+                },
+                child: Text(entry.value, style: const TextStyle(fontSize: 36)),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Reply-to ──────────────────────────────────────────────────
+
+  void _setReplyTo(Map<String, dynamic> message) {
+    setState(() {
+      _replyToMessage = message;
+      _showEmojiPicker = false;
+      _showPollCreator = false;
+    });
+  }
+
+  void _clearReplyTo() {
+    setState(() => _replyToMessage = null);
+  }
+
+  void _scrollToMessage(int messageId) {
+    final index = _messages.indexWhere((m) => m['id'] == messageId);
+    if (index == -1) return;
+    // Messages are displayed in order; calculate approximate offset
+    // Use GlobalKey approach — simpler: just animate to rough position
+    final itemExtent = 80.0; // approximate
+    final offset = (index * itemExtent).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+    _scrollController.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  // ── Polls ─────────────────────────────────────────────────────
+
+  Future<void> _createPoll(String question, List<String> options) async {
+    if (_userId == null || _phone == null || _creatingPoll) return;
+    setState(() => _creatingPoll = true);
+    try {
+      await _chatService.createPoll(
+        groupId: widget.groupId,
+        question: question,
+        options: options,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+      );
+      if (mounted) {
+        setState(() {
+          _showPollCreator = false;
+          _creatingPoll = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _creatingPoll = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create poll: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _votePoll(String pollId, int optionIndex) async {
+    if (_userId == null || _phone == null) return;
+    try {
+      await _chatService.votePoll(
+        pollId: pollId,
+        optionIndex: optionIndex,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+      );
+      // Refresh will happen via poll widget refetch
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Vote failed: $e')),
+        );
+      }
+    }
+  }
+
   void _showMessageActions(Map<String, dynamic> message, bool isMine) {
     final id = message['id'];
     if (id is! int || id <= 0) return;
@@ -1364,6 +1554,25 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Reply
+              ListTile(
+                leading: const Icon(Icons.reply, color: Color(0xFF4f6d7a)),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _setReplyTo(message);
+                },
+              ),
+              // React
+              ListTile(
+                leading: const Icon(Icons.emoji_emotions_outlined, color: Color(0xFF4f6d7a)),
+                title: const Text('React'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showReactionPicker(id);
+                },
+              ),
+              // Delete
               ListTile(
                 leading: const Icon(
                   Icons.delete_outline,
@@ -1719,8 +1928,114 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     ],
                   ),
           ),
+          // Reply-to banner
+          if (_replyToMessage != null)
+            _buildReplyBanner(),
+          // Poll creator
+          if (_showPollCreator)
+            _buildPollCreatorPanel(),
+          // Emoji picker
+          if (_showEmojiPicker)
+            _buildEmojiPickerPanel(),
           _buildInputBar(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildReplyBanner() {
+    final msg = _replyToMessage!;
+    final sender = msg['email']?.toString() ?? msg['phone']?.toString() ?? '';
+    final body = msg['body']?.toString() ?? '';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        children: [
+          Container(width: 3, height: 36, color: const Color(0xFF4f6d7a)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  sender,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4f6d7a),
+                  ),
+                ),
+                Text(
+                  body.length > 60 ? '${body.substring(0, 60)}...' : body,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+            onPressed: _clearReplyTo,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPollCreatorPanel() {
+    return _PollCreatorPanel(
+      onSubmit: (question, options) => _createPoll(question, options),
+      onCancel: () => setState(() => _showPollCreator = false),
+      creating: _creatingPoll,
+    );
+  }
+
+  Widget _buildEmojiPickerPanel() {
+    const emojis = [
+      '\u{1F600}', '\u{1F602}', '\u{1F60D}', '\u{1F60A}', '\u{1F914}',
+      '\u{1F44D}', '\u{1F44E}', '\u{1F44B}', '\u{1F64F}', '\u{1F389}',
+      '\u{2764}\u{FE0F}', '\u{1F525}', '\u{1F4AF}', '\u{2705}', '\u{274C}',
+      '\u{1F4AA}', '\u{1F60E}', '\u{1F622}', '\u{1F621}', '\u{1F92F}',
+      '\u{1F60B}', '\u{1F917}', '\u{1F61C}', '\u{1F923}', '\u{1F631}',
+      '\u{1F4A1}', '\u{1F3C6}', '\u{1F381}', '\u{1F308}', '\u{2B50}',
+      '\u{1F44F}', '\u{1F91D}', '\u{270C}\u{FE0F}', '\u{1F918}', '\u{1F64C}',
+    ];
+
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: GridView.builder(
+        padding: const EdgeInsets.all(8),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 7,
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+        ),
+        itemCount: emojis.length,
+        itemBuilder: (context, index) {
+          return GestureDetector(
+            onTap: () {
+              _messageController.text += emojis[index];
+              _messageController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _messageController.text.length),
+              );
+            },
+            child: Center(
+              child: Text(emojis[index], style: const TextStyle(fontSize: 24)),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1738,7 +2053,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       decoration: TextDecoration.underline,
     );
 
-    // Load profile image for other users
+    // Use sender_avatar_url from message data if available (e.g. bot avatars)
+    final senderAvatarUrl = message['sender_avatar_url']?.toString();
+    if (senderAvatarUrl != null &&
+        senderAvatarUrl.isNotEmpty &&
+        messageUserId != null &&
+        !_userProfileImages.containsKey(messageUserId)) {
+      _userProfileImages[messageUserId] = senderAvatarUrl;
+      _UserProfileCache.set(messageUserId, senderAvatarUrl);
+    }
+
+    // Load profile image for other users (skipped if already set from sender_avatar_url)
     if (!isMine &&
         messageUserId != null &&
         !_userProfileImages.containsKey(messageUserId)) {
@@ -1774,19 +2099,92 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         (messageType == 'image' ||
         messageType == 'video' ||
         (message['media_url']?.toString() ?? '').isNotEmpty);
+    final isPoll = messageType == 'poll';
 
-    final messageContent = (_lightweightChatView && (isVoice || isMedia))
-        ? _buildLightweightAttachmentContent(message, isMine)
-        : (isVoice
-              ? _buildVoiceContent(message, isMine)
-              : (isMedia
-                    ? _buildMediaContent(message, isMine)
-                    : RichText(
-                        text: TextSpan(
-                          style: baseStyle,
-                          children: _buildMessageSpans(text, linkStyle),
-                        ),
-                      )));
+    // Parse poll data from body: "poll::{pollId}::{question}"
+    String? pollId;
+    String? pollQuestion;
+    if (isPoll || text.startsWith('poll::')) {
+      final match = RegExp(r'^poll::([^:]+)::(.+)$').firstMatch(text);
+      if (match != null) {
+        pollId = match.group(1);
+        pollQuestion = match.group(2);
+      }
+    }
+
+    // Reply-to preview
+    final replyToId = message['reply_to_id'];
+    Widget? replyPreview;
+    if (replyToId != null && replyToId is int && replyToId > 0) {
+      final replyMsg = _messages.cast<Map<String, dynamic>?>().firstWhere(
+        (m) => m?['id'] == replyToId,
+        orElse: () => null,
+      );
+      if (replyMsg != null) {
+        final replyText = replyMsg['body']?.toString() ?? '';
+        final replyEmail = replyMsg['email']?.toString() ?? replyMsg['phone']?.toString() ?? '';
+        replyPreview = GestureDetector(
+          onTap: () => _scrollToMessage(replyToId),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: isMine ? Colors.white54 : const Color(0xFF4f6d7a), width: 2)),
+              color: isMine ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  replyEmail,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isMine ? Colors.white70 : const Color(0xFF4f6d7a),
+                  ),
+                ),
+                Text(
+                  replyText.length > 80 ? '${replyText.substring(0, 80)}...' : replyText,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isMine ? Colors.white60 : Colors.black54,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    final Widget messageContent;
+    if (pollId != null) {
+      messageContent = _PollCardWidget(
+        pollId: pollId,
+        question: pollQuestion ?? '',
+        chatService: _chatService,
+        userId: _userId!,
+        phone: _phone!,
+        email: _email,
+        isMine: isMine,
+      );
+    } else if (_lightweightChatView && (isVoice || isMedia)) {
+      messageContent = _buildLightweightAttachmentContent(message, isMine);
+    } else if (isVoice) {
+      messageContent = _buildVoiceContent(message, isMine);
+    } else if (isMedia) {
+      messageContent = _buildMediaContent(message, isMine);
+    } else {
+      messageContent = RichText(
+        text: TextSpan(
+          style: baseStyle,
+          children: _buildMessageSpans(text, linkStyle),
+        ),
+      );
+    }
 
     final messageBubble = Container(
       constraints: BoxConstraints(
@@ -1797,17 +2195,78 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         color: isMine ? const Color(0xFF4f6d7a) : Colors.grey.shade200,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: messageContent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (replyPreview != null) replyPreview,
+          messageContent,
+        ],
+      ),
     );
 
     final id = message['id'];
     final canShowActions = (id is int && id > 0);
+
+    // Reaction badges below the bubble
+    final reactions = (id is int) ? _messageReactions[id] : null;
+    final reactionCounts = reactions != null ? reactions['counts'] as Map? : null;
+    final myReactions = reactions != null
+        ? List<String>.from(reactions['my_reactions'] ?? [])
+        : <String>[];
+
+    Widget? reactionRow;
+    if (reactionCounts != null && reactionCounts.isNotEmpty) {
+      final chips = <Widget>[];
+      for (final entry in reactionCounts.entries) {
+        final count = entry.value is int ? entry.value as int : int.tryParse(entry.value.toString()) ?? 0;
+        if (count <= 0) continue;
+        final emoji = _reactionEmojis[entry.key] ?? entry.key;
+        final isMyReaction = myReactions.contains(entry.key);
+        chips.add(
+          GestureDetector(
+            onTap: () => _toggleReaction(id as int, entry.key.toString()),
+            child: Container(
+              margin: const EdgeInsets.only(right: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isMyReaction
+                    ? const Color(0xFF4f6d7a).withValues(alpha: 0.2)
+                    : Colors.grey.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: isMyReaction
+                    ? Border.all(color: const Color(0xFF4f6d7a).withValues(alpha: 0.4))
+                    : null,
+              ),
+              child: Text(
+                '$emoji $count',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
+        );
+      }
+      if (chips.isNotEmpty) {
+        reactionRow = Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Wrap(children: chips),
+        );
+      }
+    }
+
     final interactiveBubble = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onLongPress: canShowActions
           ? () => _showMessageActions(message, isMine)
           : null,
-      child: messageBubble,
+      child: Column(
+        crossAxisAlignment: isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          messageBubble,
+          if (reactionRow != null) reactionRow,
+        ],
+      ),
     );
 
     // For my messages, just show the bubble aligned right
@@ -2585,8 +3044,37 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.emoji_emotions_outlined, color: Colors.grey),
-              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(
+                  _showEmojiPicker ? Icons.keyboard : Icons.emoji_emotions_outlined,
+                  color: _showEmojiPicker ? const Color(0xFF4f6d7a) : Colors.grey,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _showEmojiPicker = !_showEmojiPicker;
+                    _showPollCreator = false;
+                  });
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 4),
+              // Poll creator button
+              IconButton(
+                icon: Icon(
+                  Icons.poll_outlined,
+                  color: _showPollCreator ? const Color(0xFF4f6d7a) : Colors.grey,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _showPollCreator = !_showPollCreator;
+                    _showEmojiPicker = false;
+                  });
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 4),
               Expanded(
                 child: _pendingVoicePath == null
                     ? TextField(
@@ -2730,6 +3218,347 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Poll Creator Panel ──────────────────────────────────────────
+
+class _PollCreatorPanel extends StatefulWidget {
+  final void Function(String question, List<String> options) onSubmit;
+  final VoidCallback onCancel;
+  final bool creating;
+
+  const _PollCreatorPanel({
+    required this.onSubmit,
+    required this.onCancel,
+    required this.creating,
+  });
+
+  @override
+  State<_PollCreatorPanel> createState() => _PollCreatorPanelState();
+}
+
+class _PollCreatorPanelState extends State<_PollCreatorPanel> {
+  final _questionController = TextEditingController();
+  final List<TextEditingController> _optionControllers = [
+    TextEditingController(),
+    TextEditingController(),
+  ];
+
+  @override
+  void dispose() {
+    _questionController.dispose();
+    for (final c in _optionControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addOption() {
+    if (_optionControllers.length >= 6) return;
+    setState(() => _optionControllers.add(TextEditingController()));
+  }
+
+  void _removeOption(int index) {
+    if (_optionControllers.length <= 2) return;
+    setState(() {
+      _optionControllers[index].dispose();
+      _optionControllers.removeAt(index);
+    });
+  }
+
+  void _submit() {
+    final question = _questionController.text.trim();
+    final options = _optionControllers
+        .map((c) => c.text.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (question.isEmpty || options.length < 2) return;
+    widget.onSubmit(question, options);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Text('Create Poll', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: widget.onCancel,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _questionController,
+            decoration: const InputDecoration(
+              hintText: 'Ask a question...',
+              isDense: true,
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            style: const TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          ...List.generate(_optionControllers.length, (i) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _optionControllers[i],
+                      decoration: InputDecoration(
+                        hintText: 'Option ${i + 1}',
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                  if (_optionControllers.length > 2)
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.redAccent),
+                      onPressed: () => _removeOption(i),
+                      padding: const EdgeInsets.only(left: 4),
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+            );
+          }),
+          Row(
+            children: [
+              if (_optionControllers.length < 6)
+                TextButton.icon(
+                  onPressed: _addOption,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add option', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              const Spacer(),
+              ElevatedButton(
+                onPressed: widget.creating ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4f6d7a),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  minimumSize: Size.zero,
+                ),
+                child: widget.creating
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Create', style: TextStyle(fontSize: 13)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Poll Card Widget ────────────────────────────────────────────
+
+class _PollCardWidget extends StatefulWidget {
+  final String pollId;
+  final String question;
+  final GroupChatService chatService;
+  final String userId;
+  final String phone;
+  final String? email;
+  final bool isMine;
+
+  const _PollCardWidget({
+    required this.pollId,
+    required this.question,
+    required this.chatService,
+    required this.userId,
+    required this.phone,
+    this.email,
+    required this.isMine,
+  });
+
+  @override
+  State<_PollCardWidget> createState() => _PollCardWidgetState();
+}
+
+class _PollCardWidgetState extends State<_PollCardWidget> {
+  Map<String, dynamic>? _poll;
+  bool _loading = true;
+  bool _voting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPoll();
+  }
+
+  Future<void> _fetchPoll() async {
+    try {
+      final poll = await widget.chatService.fetchPoll(
+        pollId: widget.pollId,
+        userId: widget.userId,
+        phone: widget.phone,
+        email: widget.email,
+      );
+      if (mounted) setState(() { _poll = poll; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _vote(int optionIndex) async {
+    if (_voting) return;
+    setState(() => _voting = true);
+    try {
+      await widget.chatService.votePoll(
+        pollId: widget.pollId,
+        optionIndex: optionIndex,
+        userId: widget.userId,
+        phone: widget.phone,
+        email: widget.email,
+      );
+      await _fetchPoll();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Vote failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _voting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = widget.isMine ? Colors.white : Colors.black87;
+    final subColor = widget.isMine ? Colors.white70 : Colors.black54;
+
+    if (_loading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('\u{1F4CA} ${widget.question}', style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
+          const SizedBox(height: 8),
+          const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+        ],
+      );
+    }
+
+    if (_poll == null) {
+      return Text('Poll unavailable', style: TextStyle(color: subColor, fontStyle: FontStyle.italic));
+    }
+
+    final options = List<String>.from(_poll!['options'] ?? []);
+    final votes = Map<String, dynamic>.from(_poll!['votes'] ?? {});
+    final totalVotes = (_poll!['total_votes'] as int?) ?? 0;
+    final myVote = _poll!['my_vote'];
+    final hasVoted = myVote != null;
+    final isClosed = _poll!['closed_at'] != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('\u{1F4CA} ${_poll!['question'] ?? widget.question}',
+          style: TextStyle(fontWeight: FontWeight.w600, color: textColor, fontSize: 14)),
+        const SizedBox(height: 8),
+        ...List.generate(options.length, (i) {
+          final count = votes[i.toString()] as int? ?? 0;
+          final pct = totalVotes > 0 ? (count / totalVotes) : 0.0;
+          final isMyVote = myVote == i;
+
+          if (hasVoted || isClosed) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${isMyVote ? "\u{2713} " : ""}${options[i]}',
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 13,
+                            fontWeight: isMyVote ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '${(pct * 100).round()}%',
+                        style: TextStyle(color: subColor, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: pct,
+                      minHeight: 4,
+                      backgroundColor: widget.isMine
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.08),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        widget.isMine ? Colors.white70 : const Color(0xFF4f6d7a),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _voting ? null : () => _vote(i),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: textColor,
+                  side: BorderSide(color: textColor.withValues(alpha: 0.3)),
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(options[i], style: const TextStyle(fontSize: 13)),
+              ),
+            ),
+          );
+        }),
+        if (totalVotes > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '$totalVotes vote${totalVotes == 1 ? '' : 's'}',
+              style: TextStyle(color: subColor, fontSize: 11),
+            ),
+          ),
+      ],
     );
   }
 }
